@@ -1,0 +1,163 @@
+Filename: 212-using-old-consensus.txt
+Title: Tor Port Guardian # XXX filename
+Author: George Kadianakis
+Created: 01-10-2012
+Status: Open
+Target: 0.2.4.x+
+
+0. Overview
+
+This proposal defines a scheme for Tor components to authenticate to
+each other using a shared-secret.
+
+1. Motivation
+
+Proposal 196 introduced new ways for pluggable transport proxies to
+communicate with Tor. The communication happens using TCP in the same
+fashion that controllers speak to the ControlPort.
+
+To defend against cross-protocol attacks [0] on the transport ports,
+we need to define an authentication scheme that will restrict passage
+to unknown clients.
+
+Tor's ControlPort uses an authentication scheme called safe-cookie
+authentication [1]. Unfortunately, the design of the safe-cookie
+authentication was influenced by the protocol structure of the
+ControlPort and the need for backwards compatibility of the
+cookie-file and can't be easily reused in other use cases.
+
+2. Goals
+
+The general goal of Tor Port Guardian is to authenticate the client
+based on a shared-secret that only authorized clients should know.
+
+Furthermore, its implementation should be flexible and easy to reuse,
+so that it can be used as the authentication mechanism in front of
+future Tor helper ports (for example, in proposal 199).
+
+Finally, the Tor Port Guardian is able to support multiple
+authentication schemes and each of them has different goals.
+
+3. Protocol Specification
+
+3.1. Initial handshake
+
+When a client connects to a port protected by Tor Port Guardian, the
+server sends:
+
+    HandshakeVersion                           [1 octet]
+    v1 handshake:
+        AuthType                               [1 octet]
+
+Where,
++ HandshakeVersion is the version of the Tor Port Guardian
+  handshake. At the moment the only accepted version is '1'.
+
++ AuthType is the authentication scheme that the server wants to use
+  for this session.
+
+If the client doesn't recognize the handshake version or the
+handshake-specific fields it MUST close the connection.
+
+3.2. Handshake types
+
+3.2.1 SAFE_COOKIE handshake
+
+Auth type 0x1 is SAFE_COOKIE.
+
+3.2.1.0. Motivation and goals
+
+The SAFE_COOKIE scheme is pretty-much identical to the authentication
+scheme that was introduced for the ControlPort in proposal 193.
+
+An additional goal of the SAFE_COOKIE authentication scheme (apart
+from the goals of section 2), is that it should not leak the contents
+of the cooki-efile to untrusted parties.
+
+Specifically, the SAFE_COOKIE protocol will never leak the actual
+contents of the file. Instead, it uses a challenge-response protocol
+(similar to the HTTP digest authentication of RFC2617) to ensure that
+both parties know the cookie but without leaking the cookie itself.
+
+3.2.1.2. Cookie-file format
+
+The format of the cookie-file is:
+
+   Header                                      [32 octets]
+     "TPG"                                       [3 bytes]
+     XXX what else should be in the header?
+   Cookie                                      [rest of the file]
+
+Where,
++ Cookie is the cookie. During the SAFE_COOKIE protocol, the cookie is
+  called CookieString.
+
+Specifying the location of the cookie-file is not in the scope in this
+proposal and should be specified by the parent protocol (the protocol
+that TPG protects).
+
+3.2.1.2 Protocol specification
+
+XXX increase verbosity
+
+A client that performs the SAFE_COOKIE handshake begins by sending:
+
+   ClientNonce                                 [32 octets]
+
+Where,
++ ClientNonce is 32 bytes of random data.
+
+Then, the server replies with:
+
+   ServerHash                                  [32 octets]
+   ServerNonce                                 [32 octets]
+
+Where,
++ ServerNonce is XXX random bytes.
++ ServerHash is computed as:
+    HMAC-SHA256("Tor Port Guardian safe cookie server-to-client hash",
+                CookieString | ClientNonce | ServerNonce)
+
+The client MUST validate ServerHash, and should only proceed with the
+protocol if it's valid.
+
+Then, the client replies with:
+
+   ClientHash                                  [32 octets]
+
+Where,
++ ClientHash is computed as:
+    HMAC-SHA256("Tor Port Guardian safe cookie client-to-server hash",
+                CookieString | ClientNonce | ServerNonce)
+
+
+The server MUST validate ServerHash, and should only authenticate the
+client if it's valid.
+
+Finally, the server replies with:
+
+   Status                                      [1 octet]
+
+Where,
++ Status is '1' if the authentication was successfull and '0'
+otherwise.
+
+3.3. Post-authentication
+
+When the authentication is performed successfully, the parties should
+continue performing the original protocol (that is, the protocol that
+TPG was protecting) in the same TCP connection.
+
+3.4. Security/Discussion
+
+XXX
+
+4. Future
+
+XXX
+
+[0]:
+http://archives.seul.org/or/announce/Sep-2007/msg00000.html
+
+[1]:
+https://gitweb.torproject.org/torspec.git/blob/79f488c32c43562522e5592f2c19952dc7681a65:/control-spec.txt#l1069

@@ -196,7 +196,11 @@ Managed proxy interface
        methods that the proxy should support, or * if all methods
        should be enabled.  The proxy SHOULD ignore methods that it
        doesn't recognize.
-      Example: TOR_PT_SERVER_TRANSPORTS=trebuchet,ballista
+      Example: TOR_PT_SERVER_TRANSPORTS=trebuchet,ballist
+
+      "TOR_PT_AUTH_COOKIE" -- A filesystem path where the proxy should
+      expect to find the authentication cookie to be able to
+      communicate with the Extended ORPort and TransportControlPort.
 
   The transport proxy replies by writing NL-terminated lines to
   stdout.  The line metaformat is
