@@ -120,8 +120,8 @@ Target: 0.2.4.x+
 
   Where,
   + ServerHash is computed as:
-      HMAC-SHA256("ExtORPort authentication safe cookie server-to-client hash",
-                  CookieString | ClientNonce | ServerNonce)
+      HMAC-SHA256(CookieString,
+        "ExtORPort authentication server-to-client hash" | ClientNonce | ServerNonce)
   + ServerNonce is 32 random octets.
 
   Upon receiving that data, the client computers ServerHash herself and
@@ -136,8 +136,8 @@ Target: 0.2.4.x+
 
   Where,
   + ClientHash is computed as:
-      HMAC-SHA256("ExtORPort authentication safe cookie client-to-server hash",
-                  CookieString | ClientNonce | ServerNonce)
+      HMAC-SHA256(CookieString,
+        "ExtORPort authentication client-to-server hash" | ClientNonce | ServerNonce)
 
   Upon receiving that data, the server computers ClientHash herself and
   validates it against the ClientHash provided by the client.
