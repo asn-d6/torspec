@@ -96,9 +96,13 @@ Target: 0.2.4.x+
 
   Where,
   + StaticHeader is the following string:
-    "This is an authentication cookie"
+    "! Extended ORPort Auth Cookie !\x0a"
   + Cookie is the shared-secret. During the SAFE_COOKIE protocol, the
     cookie is called CookieString.
+
+  Extended ORPort clients MUST make sure that the StaticHeader is
+  present in the cookie file, before proceeding with the
+  authentication protocol.
 
   Details on how Tor locates the cookie file can be found in section 5
   of proposal 196. Details on how transport proxies locate the cookie

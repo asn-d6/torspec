@@ -201,6 +201,8 @@ Managed proxy interface
       "TOR_PT_AUTH_COOKIE_FILE" -- A filesystem path where the proxy
       should expect to find the authentication cookie to be able to
       communicate with the Extended ORPort and TransportControlPort.
+      TOR_PT_AUTH_COOKIE_FILE is optional and might not be present in
+      the environment of the proxy.
 
   The transport proxy replies by writing NL-terminated lines to
   stdout.  The line metaformat is
