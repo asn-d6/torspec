@@ -67,6 +67,9 @@ Target: 0.2.4.x+
     255. A value of 0 means that the client did not like the
     authentication types offered by the server.
 
+  If the client sent an AuthType of value 0, or an AuthType that the
+  server does not support, the server MUST close the connection.
+
 4.2. Authentication types
 
 4.2.1 SAFE_COOKIE handshake
