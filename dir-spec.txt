@@ -680,6 +680,14 @@
         List of unique IP addresses that have connected to the bridge
         per protocol family.
 
+    "bridge-transports" PT=N,PT=N,... NL
+        [At most once.]
+
+        List of mappings from pluggable transport names to the number
+        of unique IP addresses that have connected using that
+        pluggable transport. Unobfuscated connections are counted
+        using the reserved pluggable transport name "<OR>".
+
     "dirreq-stats-end" YYYY-MM-DD HH:MM:SS (NSEC s) NL
         [At most once.]
 
