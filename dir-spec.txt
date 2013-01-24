@@ -693,9 +693,11 @@
         MUST match the following regular expression:
         "[a-zA-Z_][a-zA-Z0-9_]*" )
 
-        If no clients have connected to the bridge yet, this line is
-        omitted. Also, the pluggable transport name list is sorted
-        into lexically ascending order.
+        The pluggable transport name list is sorted into lexically
+        ascending order.
+
+        If no clients have connected to the bridge yet, we only write
+        "bridge-ip-transports" to the stats file.
 
     "dirreq-stats-end" YYYY-MM-DD HH:MM:SS (NSEC s) NL
         [At most once.]
