@@ -687,10 +687,13 @@
         of unique IP addresses that have connected using that
         pluggable transport. Unobfuscated connections are counted
         using the reserved pluggable transport name "<OR>" (without
-        quotes).
+        quotes). If we received a connection from a transport proxy
+        but we couldn't figure out the name of the pluggable
+        transport, we use the reserved pluggable transport name
+        "<??>".
 
-        ("<OR>" is reserved because normal pluggable transport names
-        MUST match the following regular expression:
+        ("<OR>" and "<??>" are reserved because normal pluggable
+        transport names MUST match the following regular expression:
         "[a-zA-Z_][a-zA-Z0-9_]*" )
 
         The pluggable transport name list is sorted into lexically
