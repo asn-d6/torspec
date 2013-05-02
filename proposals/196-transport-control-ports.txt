@@ -102,7 +102,7 @@ Target: 0.2.4.x
 
   The string MUST not be NUL-terminated.
 
-3.1.2.1. TRANSPORT
+3.1.2.2. TRANSPORT
 
   An ASCII string holding the name of the pluggable transport used by
   the client of the pluggable transport proxy. A Tor bridge that
