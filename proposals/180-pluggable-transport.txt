@@ -156,6 +156,8 @@ Specifications: Client behavior
   password fields of the request, splitting them across the fields
   as necessary.  If a key or value value must contain a semicolon or
   a backslash, it is escaped with a backslash.
+  Example of SOCKS parameters encoding:
+    shared-secret=rahasia;secrets-file=/tmp/blob
 
   Method names must be C identifiers.
 
