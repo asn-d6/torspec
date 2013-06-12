@@ -234,13 +234,13 @@ Managed proxy interface
       TOR_PT_AUTH_COOKIE_FILE is optional and might not be present in
       the environment of the proxy.
 
-      "TOR_PT_SERVER_TRANSPORT_PARAMETERS" -- A comma seperated list
+      "TOR_PT_SERVER_TRANSPORT_OPTIONS" -- A comma seperated list
        of <key>:<value> pairs, where <key> is a transport name and
        <value> is a k=v string value with options that are to be
        passed to the transport. Colons, semicolons, equal signs and
        backslashes must be escaped with a backslash.
       Example:
-        TOR_PT_SERVER_BINDADDR=trebuchet:secret=nou;trebuchet:cache=/tmp/cache;ballista:secret=yes
+        TOR_PT_SERVER_TRANSPORT_OPTIONS=trebuchet:secret=nou;trebuchet:cache=/tmp/cache;ballista:secret=yes
       will pass to 'trebuchet' the arguments "secret=nou" and
       "cache=/tmp/cache" and will pass to 'ballista' the argument
       "secret=yes".
