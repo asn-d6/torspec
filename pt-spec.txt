@@ -239,11 +239,14 @@ Managed proxy interface
        <value> is a k=v string value with options that are to be
        passed to the transport. Colons, semicolons, equal signs and
        backslashes must be escaped with a backslash.
-      Example:
-        TOR_PT_SERVER_TRANSPORT_OPTIONS=trebuchet:secret=nou;trebuchet:cache=/tmp/cache;ballista:secret=yes
-      will pass to 'trebuchet' the arguments "secret=nou" and
-      "cache=/tmp/cache" and will pass to 'ballista' the argument
-      "secret=yes".
+       The TOR_PT_SERVER_TRANSPORT_OPTIONS is optional and might not
+       be present in the environment of the proxy if no options need
+       to be passed to transports.
+       Example:
+         TOR_PT_SERVER_TRANSPORT_OPTIONS=trebuchet:secret=nou;trebuchet:cache=/tmp/cache;ballista:secret=yes
+       will pass to 'trebuchet' the arguments "secret=nou" and
+       "cache=/tmp/cache" and will pass to 'ballista' the argument
+       "secret=yes".
 
   The transport proxy replies by writing NL-terminated lines to
   stdout.  The line metaformat is
