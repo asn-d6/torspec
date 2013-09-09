@@ -329,8 +329,8 @@ Managed proxy interface
       - ARGS:K=V,K=V,K=V
 
         If this option is set, the K=V arguments are added to Tor's
-        extrainfo document. Equal signs and commas must be escaped
-        with a backslash.
+        extrainfo document (see next section). Equal signs and commas
+        must be escaped with a backslash.
 
   SMETHOD and CMETHOD lines may be interspersed, to allow the proxies to
   report methods as they become available, even when some methods may
@@ -372,3 +372,7 @@ Advertising bridge methods
   SMETHOD line's Options component (commas and equal signs are escaped
   with a backslash).
 
+  Example:
+     transport trebuchet 1.2.3.4:567 argone=valueone,argtwo=valuetwo
+  or the groovier:
+     transport trebuchet 1.2.3.4:567 escapecomma\,=valueone,argtwo=valuetwo
