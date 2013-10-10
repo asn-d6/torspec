@@ -1,0 +1,86 @@
+Filename: xxx-hs-id-keys-migration.txt
+Title: On the migration to ed25519 HS identity keys and privacy-preserving directory documents
+Author: George Kadianakis
+Created: 13 September 2013
+Target: 0.2.5.x
+Status: Draft
+
+                                         [More draft than Guinness.]
+
+0. Overview and motivation
+
+  Proposal XXX introduces two new HS features:
+  a) Stronger HS identity keys.
+  b) New-style HS directory documents so that HS addresses are not
+     leaked to HSDirs.
+
+  This document specifies how different Tor actors must act after
+  proposal XXX is implemented, so that the migration can proceed
+  smoothly.
+
+  We aim for the migration to be smooth both from the perspective of
+  Hidden Services (introduce grace period so that HS operators don't
+  wake up one day to find that their HS can't be accessed with that
+  address anymore) and from an implementation perspective (avoid
+  bloating the Tor protocol or introducing sensitive flag days).
+
+1. Migration strategy
+
+  After proposal XXX is implemented:
+  a) The HS address format will change (called "new-style HS address"
+     in this document)
+  b) New HSDirs will be introduced (called "HSDirV3" in this document)
+  c) New-style HS descriptors will be introduced (called "HS V3
+     descriptors" in this document).
+
+  The following sections investigate how these changes influence the
+  various Tor actors:
+
+1.1. From the PoV of Hidden Services:
+
+  New Hidden Services will only publish v3 descriptors. If a Hidden
+  Service has already an RSA1024 identity key, it will publish both v2
+  *and* v3 descriptors.
+
+  The publishing of v2 descriptors for legacy Hidden Services can be
+  disabled using a torrc parameter. The torrc parameter will initially
+  allow the publishing of v2 descriptors, and eventually (XXX) will be
+  disabled.
+
+1.2. From the PoV of the HS client:
+
+  Tor clients can distinguish new-style HS addresses from old ones by
+  their length. Legacy addresses are 16 base32 characters, while new
+  ones are 52 base32 characters.
+
+1.3. From the PoV of HS directories:
+
+  Tor relays will advertise themselves as HSDirV3 servers by appending
+  '3' in their "hidden-service-dir" router descriptor line.
+
+  For a while, relays will also continue being HSDirV2 servers. We
+  will specify a grace period of X months (4?), after which relays
+  will stop being HSDirV2 servers by default (using the appropriate
+  torrc parameter).
+
+1.4. From the PoV of directory authorities:
+
+  Authorities will continue voting for HSDirV2 servers. Eventually,
+  when all relays have upgraded and none is claiming to be HSDirV2, we
+  can disable and remove the relevant code.
+
+XXX We need to specify grace periods. Should we change the "X months"
+and "eventually" phrases to "When 0.2.6.x. becomes stable" or to "When
+0.2.6.x. becomes stable && no earlier than in X months" or to
+something else?
+
+XXX Should there be a way to link new/old identities? A plausible
+solution here (that doesn't lead to obvious enumeration opportunities)
+is to have Hidden Services send a "You are using my old HS
+address. Try this one" relay cell right after the RP circuit has been
+spliced and before the RELAY_COMMAND_BEGIN command has been sent by
+the client. This way the the new address is not leaked to HSDirs, IPs
+or RPs. This is quite an amount of design/implementation work and I'm
+not sure if it's worth it. Still this communication channel is worth
+considering for further uses.
+

@@ -1,0 +1,351 @@
+Filename: xxx-hs-id-keys-and-onion-leaking.txt
+Title: On upgrading HS identity keys and on a new HS directory scheme that does not leak
+Author: George Kadianakis
+Created: 10 August 2013
+Target: 0.2.5.x
+Status: Draft
+
+                                         [More draft than Guiness.]
+
+ToC:
+
+0. Overview
+1. Motivation
+2. Related proposals
+3. Overview of changes
+4. Specification of changes
+5. Discussion
+6. Acknowledgments
+
+Appendix:
+A0. Security proof of directory scheme
+
+---
+
+0. Overview:
+
+  This proposal has two aims:
+
+  a) Improve the strength of HS identity keys.
+
+     Specifically, this proposal suggests the adoption of Ed25519
+     ECDSA keys as a replacement for the RSA-1024 keys that are
+     currently in use by hidden services.
+
+  b) Stop HS address enumeration by HSDirs
+
+     When a client asks for the descriptor of a hidden service the
+     hidden service address is leaked to the HSDir that was inquired.
+     This proposal suggests a new directory scheme that prevents
+     HSDirs from learning the hidden service address or the contents
+     of the hidden service descriptors they serve.
+
+1. Motivation
+
+  The long-term identity keys of Hidden Services are RSA-1024 keys; we
+  consider these weak and in need for replacement. Furthermore, 80-bit
+  hidden service addresses are short enough to be prone to brute-force
+  impersonation attacks.
+
+  Ed25519 (specifically, Ed25519-SHA-512 as described and specified
+  at http://ed25519.cr.yp.to/) is a good alternative: it's secure,
+  fast, has small keys and small signatures, is bulletproof in
+  several important ways, and supports fast batch verification. (It
+  isn't quite as fast as RSA1024 when it comes to public key
+  operations, since RSA gets to take advantage of small exponents
+  when generating public keys.)
+
+2. Related proposals
+
+  This proposal goes hand in hand with proposal XXX "On the migration
+  to Ed25519 HS identity keys and privacy-preserving directory
+  documents". Proposal XXX specifies how the schemes described in this
+  proposal should be deployed in the real Tor network to minimize
+  frustration and bad vibes.
+
+  XXX Another related proposal is proposal XXX "On the upgrade of Hidden
+  Service service keys" which defines the upgrade from the current
+  RSA-1024 HS service keys to a more powerful cryptosystem.
+
+3. Overview of changes
+
+  This section provides a high-level overview of the changes suggested
+  in this document.
+
+3.0. Overview of identity-key changes
+
+    Longterm RSA-1024 "identity keys" are used by hidden services to
+    authenticate themselves to clients.
+
+    This proposal specifies:
+    * The generation of new Ed25519 long-term identity keypairs (#KEYGEN)
+    * A new HS descriptor format (v3) that contains Ed25519 HS
+      identity keys (#NEWDESC)
+    * A way for clients to upload and fetch v3 descriptors from
+      HSDirs (#DESCFETCH and #DESCUPLOAD)
+
+3.1. Overview of anti-enumeration scheme
+
+    Currently, Hidden Services upload their unencrypted descriptor to
+    hidden service directories (HSDirs). HSDirs store the unencrypted
+    descriptor in an internal map of: <hs address> -> <hs descriptor>
+    When a client wants the descriptor of an HS, it asks an HSDir for
+    the descriptor that corresponds to <hs address>. If the HSDir has
+    such an index in its map, it returns the <hs descriptor> to the
+    client.
+
+    This proposal asks Hidden Services to periodically derive a new
+    ephemeral keypair from their long-term identity key; the new keypair
+    being a function of the identity key and a time-dependent nonce. The
+    derivation should be one-way; if you know the identity key you
+    should be able to derive the ephemeral key but not the other way
+    around. Finally, a client should be able to derive the ephemeral HS
+    public key from the long-term HS public key without knowing the
+    long-term HS private key (#KEYPAIRDERIVATION)
+
+    Hidden Services then encrypt their descriptor with a symmetric key
+    (derived from the long-term identity public key) and sign the
+    ciphertext and the ephemeral public key with their ephemeral
+    private key (#NEWDESC). Then they place the ephemeral public key,
+    the encrypted descriptor and the signature in a v3 hidden servide
+    descriptor and send that to the HSDir (#DESCUPLOAD).
+
+    When the HSDir receives a v3 hidden service descriptor, it validates
+    the signature using the embedded ephemeral public key and if it
+    verifies it stores the descriptor in an internal map of:
+    <ephemeral public key> -> <v3 descriptor> (#DESCHANDLING).
+
+    Now, out of band, the HS gives to its clients a <z>.onion
+    address. <z> in this case is the long-term public key of the HS
+    (this is different from the current situation where <z> is the hash
+    of the long-term public key).
+
+    A client that knows the <z>.onion address and wants to acquire the
+    HS descriptor, derives the <ephemeral public key> of the HS using
+    <z> and the same key derivation procedure that the HS uses. She also
+    derives the symmetric key that decrypts the encrypted HS descriptor
+    (#KEYPAIRDERIVATION).
+
+    The client then contacts the appropriate HSDir and queries it for
+    the descriptor with index <ephemeral public key>. If the HSDir has
+    such an index in its internal map it passes the <v3 descriptor> to
+    the client (#DESCFETCH).
+
+    The client then verifies the signature of the v3 descriptor, and if
+    it's legit she decrypts the encrypted descriptor using the ephemeral
+    symmetric key. The client now has the Hidden Servide descriptor she
+    was looking for (#DESCHANDLING).
+
+4. Specificaton of changes
+
+4.0 Generation of long-term identity-key Ed25519 keypairs (#KEYGEN)
+
+    When a hidden service starts up with no Ed25519 identity keys, it
+    generates a new identity keypair.
+
+4.1. Ephemeral keypair derivation (anti-enumreation) (#KEYPAIRDERIVATION)
+
+    XXX Leaving this unpsecified for now till the security proof comes
+    along.
+
+4.1.0. By Hidden Services:
+
+      For now, let's assume that after this paragraph each HS has a
+      per-TIME_PERIOD ephemeral keypair. It also has a symmetric key
+      derived from the identity public key to encrypt its descriptor.
+
+4.1.1. By clients:
+
+      When a Tor client is asked to connect to a hidden service address
+      <z>.onion, it assumes that <z> is the long-term public key of the
+      hidden service. Internally, and without notifying the user, the
+      Tor client generates the ephemeral public key and ephemeral
+      symmetric key of the HS for that time period (using the long-term
+      public key of the hidden service and the procedure specified in
+      the previous section).
+
+4.2. New v3 Hidden Service Descriptor Format (#NEWDESC)
+
+    To serve the purposes of this proposal we need to perform multiple
+    modifications to hidden service descriptors. Specifically, to
+    migrate to new identity keys we need to change the format of the
+    v2 Hidden Service descriptor to use Ed25519 keys. Furthermore, to
+    provide enumeration protection we need to encrypt the whole
+    descriptor with the ephemeral symmetric key.
+
+    To do so we define a new construct just for this section, called
+    "intermediate descriptor". It has the same format as a v2 hidden
+    service descriptor but uses Ed25519 instead of RSA-1024. The
+    following changes are performed to the v2 HS descriptor:
+
+    [*] The "permanent-key" field is replaced by "permanent-key-ed25519":
+
+        "permanent-key-ed25519" SP an Ed25519 public key
+
+          [Exactly once]
+
+          The public key of the hidden service which is required to
+          verify the "descriptor-id" and "signature-ed25519".
+
+          In base64 format with terminating =s removed.
+
+    [*] The "service-key" field is replaced by "service-key-ed25519':
+
+        "service-key-ed25519" SP an Ed25519 public key
+
+          [Exactly once]
+
+          The public key used to encrypt messages to the hidden
+          service.
+
+          In base64 format with terminating =s removed.
+
+    [*] The "signature" field is replaced by "signature-ed25519':
+
+        "signature-ed25519" SP signature-string
+
+          [At end, exactly once]
+
+          A signature of all fields above using the private Ed25519
+          key of the hidden service.
+
+          In base64 format with terminating =s removed.
+
+    Now we define the format of the new v3 Hidden Service descriptor
+    that is uploaded to the HSDirs:
+
+      "ephemeral-public-key" SP public-key
+
+        [At start, exactly once]
+
+        The ephemeral HS public key for this time period.
+
+        In base64 format with terminating =s removed.
+
+      "encrypted-descriptor" SP encrypted-descriptor
+
+        [Exactly once]
+
+        An encrypted intermediate descriptor (as specified
+        above).
+
+        It's encrypted with AES in CTR mode with a random
+        initialization vector of 128 bits that is written in the
+        beginning of the encrypted string. The ephemeral symmetric key
+        derived in section XXX is used as the secret key of AES.
+
+        The encrypted string is encoded in base64 and surrounded with
+        "-----BEGIN MESSAGE-----" and "-----END MESSAGE-----".
+
+      "publication-time" SP YYYY-MM-DD HH:MM:SS NL
+
+        [Exactly once]
+
+        A timestamp when this descriptor has been created.  It should
+        be rounded down to the nearest day. The timestamp SHOULD be
+        used by the clients and HSDirs to discard old descriptors.
+
+        XXX Should we specify how long the HSDir is supposed to keep
+        the descriptor? rend-spec.txt doesn't do so.
+
+        XXX Is "rounded down to the nearest day" too extreme of a
+        rounding? Other Tor documents round it down to the nearest
+        hour. Does it matter if our expiration time is longer than a
+        day?
+
+        XXX Should we kill the "publication-time" in the HS
+        descriptors? Or just leave it there?
+
+      "signature" SP signature
+
+         [At end, exactly once]
+
+         A signature of all fields above using the ephemeral private
+         key of the hidden service.
+
+         In base64 format with terminating =s removed.
+
+4.3. Uploading v3 HS descriptors to HSDirs (#DESCUPLOAD)
+
+    A new type of Hidden Service Directory Server must be established
+    which knows how to handle v3 Hidden Service descriptors.
+
+    The Hidden Service follows the same publishing procedure as for v2
+    descriptors but instead of sending an HTTP 'POST' to
+    "/tor/rendezvous2/publish", the HS sends the 'POST' request to
+    "/tor/rendezvous3/publish" with the descriptor included in the
+    body of the 'POST'.
+
+4.4. Fetching v3 HS descriptors from HSDirs (#DESCFETCH)
+
+    When a client needs to fetch a v3 Hidden Service Descriptor from
+    an HSDir, it follows the exact same procedure as for v2
+    descriptors but instead of sending an HTTP 'GET' to
+    "/tor/rendezvous2/<z>", it sends an HTTP 'GET' to
+    "/tor/rendezvous3/<z>" where <z> is the base32 encoding of the
+    *ephemeral* public key of the Hidden Service.
+
+    XXX base32 is used because it's URL-safe and because we don't
+    really care about the extra length.
+
+    XXX example?
+
+4.5. v3 hidden servide descriptor handling (#DESCHANDLING)
+
+4.5.1. By HSDirs:
+
+      When an HSDir receives a v3 hidden service descriptor, it verifies
+      its signature using the ephemeral public key that was included in
+      the descriptor. If the signature verifies and the descriptor
+      timestamp is reasonable, the descriptor is accepted and
+      cached. Otherwise, the descriptor is discarded.
+
+4.5.2. By clients:
+
+      When a client receives a v3 hidden service descriptor, it checks
+      the timestamp and verifies the signature using the previously
+      derived keys and discards it if the signature was not proper.
+
+      If the signature is proper, the client uses the derived ephemeral
+      symmetric key to decrypt the 'encrypted-descriptor' part of the
+      metadescriptor.
+
+5. Discussion
+
+  [Points here might deserve their own sections]
+
+  Do we need the HSDir hash ring, even though the HS address and the
+  descriptor are now hidden from HSDirs?
+
+  An Ed25519 public key is 32 bytes. 32 bytes in base32 encoding is 56
+  characters (or 52 with the '=' padding removed). Do we want a
+  different URL encoding or are we happy with addresses like:
+  mfrggzdfmztwq2lknnwg23tpobyxe43uov3ho6dzpjaueq2eivda.onion ?
+
+6. Acknowledgments
+
+  The cryptography behind this proposal was originally proposed by
+  Robert Ransom in a private email thread and subsequently posted in
+  tor-dev [0]. Discussion was continued in trac ticket #8106 [1].
+
+  During the past 6 months many bright people have looked at the
+  cryptography behind this scheme. The list of people includes Nadia
+  Heninger, Leonid Reyzin, Nick Hopper, Aggelos Kiayias, Tanja Lange,
+  Dan J. Bernstein and probably others that I can't recall at this
+  point. Thanks!
+
+  Parts of this proposal has been based on discussions with Nick
+  Mathewson and his proposal 220.
+
+  XXX "One more:  Christian Grothoff told me in Garching that GNUnet does
+  something quite similar for its keys. So we should probably check out
+  their approach too, and include them in the "related work" section of
+  any hypothetical publication here. :)"
+
+Appendix:
+
+A0. Security proof of directory scheme
+
+  XXX A security proof of the above scheme is under development. We
+  are not going to implement or deploy anything before we have a solid
+  proof of this.
