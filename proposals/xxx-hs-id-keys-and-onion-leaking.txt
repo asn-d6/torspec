@@ -20,6 +20,8 @@ ToC:
 Appendix:
 A0. Security proof of directory scheme
 
+Footnotes
+
 ---
 
 0. Overview:
@@ -136,33 +138,63 @@ A0. Security proof of directory scheme
     symmetric key. The client now has the Hidden Servide descriptor she
     was looking for (#DESCHANDLING).
 
+
+XXX. Notation
+
+  TIME_PERIOD is the itme period XXX
+  H(x,t) is HMAC_SHA256 with value x and key t
+  We use the additive notation because we are doing elliptic curves XXX
+
 4. Specificaton of changes
 
 4.0 Generation of long-term identity-key Ed25519 keypairs (#KEYGEN)
 
     When a hidden service starts up with no Ed25519 identity keys, it
-    generates a new identity keypair.
+    generates a new identity Ed25519 keypair.
 
-4.1. Ephemeral keypair derivation (anti-enumreation) (#KEYPAIRDERIVATION)
+    Hereafter, 'A' will refer to the long-term identity public key,
+    and 'a' will refer to the long-term identity private key.
 
-    XXX Leaving this unpsecified for now till the security proof comes
-    along.
+4.1. Ephemeral key derivation (#KEYPAIRDERIVATION)
+
+    This section specifies how different Tor actors are supposed to
+    derive the ephemeral keys used for antienumeration.
 
 4.1.0. By Hidden Services:
 
-      For now, let's assume that after this paragraph each HS has a
-      per-TIME_PERIOD ephemeral keypair. It also has a symmetric key
-      derived from the identity public key to encrypt its descriptor.
+      # XXX We need to figure out if we are going to blind the base
+        point or not. Equations are different in each case.
+
+      When a Hidden Service needs to generate and publish a new HS
+      descriptor, it generates a blinding nonce as follows:
+
+        BN = H(time_nonce, A)
+
+      where time_nonce is the epoch rounded down to the previous day [XXX].
+
+      Hidden Services then interpret the unsigned little-endian
+      representation of the blinding nonce as an element BN_INT of the
+      Ed25519 finite field F_q (where q = 2^255 - 19), and use it to
+      generate an ephemeral public key as follows:
+
+        EPH_PUBKEY = A*BN_INT
+
+      Furthermore, Hidden Services generate an ephemeral symmetric key
+      as follows:
+
+        AESKEY = H(BN, "hs-ephemeral-symmetric-key" | A)
 
 4.1.1. By clients:
 
-      When a Tor client is asked to connect to a hidden service address
-      <z>.onion, it assumes that <z> is the long-term public key of the
-      hidden service. Internally, and without notifying the user, the
-      Tor client generates the ephemeral public key and ephemeral
-      symmetric key of the HS for that time period (using the long-term
-      public key of the hidden service and the procedure specified in
-      the previous section).
+      When a Tor client is asked to connect to a hidden service
+      address <A>.onion, it assumes that <A> is the long-term public
+      key of the hidden service.
+
+      Internally, and without notifying the user, the Tor client then
+      generates the blinding nonce, the ephemeral public key and
+      ephemeral symmetric key of the HS for that time period (using
+      the long-term public key of the hidden service and the procedure
+      specified in the previous section).
 
 4.2. New v3 Hidden Service Descriptor Format (#NEWDESC)
 
@@ -184,19 +216,9 @@ A0. Security proof of directory scheme
 
           [Exactly once]
 
-          The public key of the hidden service which is required to
-          verify the "descriptor-id" and "signature-ed25519".
-
-          In base64 format with terminating =s removed.
-
-    [*] The "service-key" field is replaced by "service-key-ed25519':
-
-        "service-key-ed25519" SP an Ed25519 public key
-
-          [Exactly once]
-
-          The public key used to encrypt messages to the hidden
-          service.
+          The long-term identity public key of the hidden service
+          which is required to verify the "descriptor-id" and
+          "signature-ed25519".
 
           In base64 format with terminating =s removed.
 
@@ -206,8 +228,8 @@ A0. Security proof of directory scheme
 
           [At end, exactly once]
 
-          A signature of all fields above using the private Ed25519
-          key of the hidden service.
+          A signature of all fields above using the long-term identity
+          private Ed25519 key of the hidden service.
 
           In base64 format with terminating =s removed.
 
@@ -218,7 +240,8 @@ A0. Security proof of directory scheme
 
         [At start, exactly once]
 
-        The ephemeral HS public key for this time period.
+        The ephemeral HS public key generated according to the
+        procedure of section 4.1.0.
 
         In base64 format with terminating =s removed.
 
@@ -260,8 +283,8 @@ A0. Security proof of directory scheme
 
          [At end, exactly once]
 
-         A signature of all fields above using the ephemeral private
-         key of the hidden service.
+         A signature of all the above fields using the ephemeral
+         private key of the hidden service.
 
          In base64 format with terminating =s removed.
 
@@ -349,3 +372,9 @@ A0. Security proof of directory scheme
   XXX A security proof of the above scheme is under development. We
   are not going to implement or deploy anything before we have a solid
   proof of this.
+
+Footnotes:
+
+[XXX]: For example, if the current Unix epoch timestamp is 1380890735,
+       then we can divide it by 86400 to get 15982 which is the number
+       of days since the Unix epoch.
