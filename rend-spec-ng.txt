@@ -2,7 +2,7 @@
 
                  Next-Generation Hidden Services in Tor
                          (DRAFT SPECIFICATION)
-                          Draft 0, 2013-10-25
+                          Draft 0, 2013-10-31
 
 
 -1. Draft notes
@@ -58,6 +58,8 @@
     XXXX writeme
 
 0.2. Notation and vocabulary
+
+   Unless specified otherwise, all multi-octet integers are big-endian.
 
    We write sequences of bytes in two ways:
 
@@ -125,7 +127,13 @@
    For legacy purposes, we specify compatibility with older versions of
    the Tor introduction point and rendezvous point protocols.  These
    used RSA1024, DH1024, AES128, and SHA1, as discussed in
-   rend-spec.txt.
+   rend-spec.txt.  Except as noted, all RSA keys MUST have exponent
+   values of 65537.
+
+   As in [proposal 220], all signatures are generated not over
+   strings themselves, but over those strings prefixed with a
+   distinguishing value.
+
 
 0.4. Protocol building blocks
 
@@ -151,38 +159,54 @@
    material unless they control the secret key corresponding to the
    server's public key.
 
+0.5. Assigned relay cell types
+
+   These relay cell types are reserved for use in the hidden service
+   protocol.
+
+      32 -- RELAY_COMMAND_ESTABLISH_INTRO
+      33 -- RELAY_COMMAND_ESTABLISH_RENDEZVOUS
+      34 -- RELAY_COMMAND_INTRODUCE1
+      35 -- RELAY_COMMAND_INTRODUCE2
+      36 -- RELAY_COMMAND_RENDEZVOUS1
+      37 -- RELAY_COMMAND_RENDEZVOUS2
+      38 -- RELAY_COMMAND_INTRO_ESTABLISHED
+      39 -- RELAY_COMMAND_RENDEZVOUS_ESTABLISHED
+      40 -- RELAY_COMMAND_INTRODUCE_ACK
+
 0.5. Acknowledgments
 
-   XXXX reformat
+   XXXX reformat these once the lists are more complete.
 
    This design includes ideas from many people, including
      Christopher Baines,
      Daniel J. Bernstein,
+     Matthew Finkel,
+     Ian Goldberg,
      George Kadianakis,
+     Aniket Kate,
      Tanja Lange,
      Robert Ransom,
-     Ian Goldberg,
-     Aniket Kate
 
    It's based on Tor's original hidden service design by Roger
    Dingledine, Nick Mathewson, and Paul Syverson, and on improvements to
    that design over the years by people including
-     Karsten Loesing,
-     Robert Ransom,
      Tobias Kamm,
      Thomas Lauterbach,
+     Karsten Loesing,
+     Alessandro Preite Martinez,
+     Robert Ransom,
      Ferdinand Rieger,
      Christoph Weingarten,
-     Christian Wilms
-     Alessandro Preite Martinez
+     Christian Wilms,
 
    We wouldn't be able to do any of this work without good attack
    designs from researchers including
      Alex Biryukov,
-     Ivan Pustogarov,
-     Ralf-Philipp Weinmann,
      Lasse Øverlier,
-     Paul Syverson.
+     Ivan Pustogarov,
+     Paul Syverson
+     Ralf-Philipp Weinmann,
 
    Several of these ideas have come from conversations with
       Christian Grothoff,
@@ -355,7 +379,16 @@
    corresponding descriptor encryption keys, and export those to the
    hidden service hosts.
 
-1.8. In more detail: A gallimaufry of keys
+1.8. In more detail: ENCRYPTION KEYS AND REPLAY RESISTANCE
+
+  XXXXXXXXXXX WRITEME
+
+
+1.9. In more detail: A gallimaufry of keys
+
+   [In the text below, an "encryption keypair" is roughly "a keypair can
+   do Diffie-Hellman with" and a "signing keypair" is roughly "a keypair
+   you can do ECDSA with."]
 
    Public/private keypairs defined in this document:
 
@@ -382,14 +415,13 @@
         sign the request that a hidden service host makes when establishing
         an introduction point, so that clients who know the public component
         of this key can get their introduction requests sent to the right
-        service.
+        service.  No keypair is ever used with more than one
+        introduction point.
 
       Introduction point encryption key -- A short-term encryption keypair
         used when establishing connections via an introduction point. Plays a
         role analogous to Tor nodes' onion keys. A fresh keypair is made for
         each introduction point.
-
-      Handshake key -- XXXX keep this?
 
    Symmetric keys defined in this document:
 
@@ -399,21 +431,268 @@
 
    Public/private keypairs defined elsewhere:
 
-      Onion key
+      Onion key -- Short-term encryption keypair
 
       (Node) identity key
 
    Symmetric keys defined elsewhere:
 
-      KH from circuit handshake [XXXXX expand]
+      KH from circuit handshake 
 
-2. Hidden service descriptors and how they are published
+2. Hidden service descriptors and how they are published [HSDIR]
 
   XXXXX writeme
 
 3. The introduction protocol
 
-  XXXX writeme
+  The introduction protocol proceeds in three steps.
+
+    First, a hidden service host builds an anonymous circuit to a
+    Tor node and registers that circuit as an introduction point.
+
+        [Between these steps, the hidden service publishes its
+        introduction points and associated keys, and the client
+        fetches them as described in section [HSDIR] above.]
+
+    Second, a client builds an anonymous circuit to the introduction
+    point, and sends an introduction request.
+
+    Third, the introduction point relays the introduction request
+    along the introduction circuit to the hidden service host, and
+    acknowledges the introduction request to the client.
+
+3.1. Registering an introduction point
+
+3.1.1. Extensible ESTABLISH_INTRO protocol. [EST_INTRO]
+
+  When a hidden service is establishing a new introduction point,
+  it sends a ESTABLISH_INTRO cell with the following contents:
+
+    SERVICE_KEY_TYPE [1 byte]
+    SERVICE_KEY_LEN  [1 byte]
+    SERVICE_KEY      [SERVICE_KEY_LEN bytes]
+    FLAGS            [4 bytes]
+    Any number of times:
+       EXT_FIELD_TYPE [1 byte]
+       EXT_FIELD_LEN  [1 byte]
+       EXT_FIELD      [EXTRA_FIELD_LEN bytes]
+    ZERO             [1 byte]
+    HANDSHAKE_AUTH   [MAC_LEN bytes]
+    SIGLEN           [1 byte]
+    SIG              [SIGLEN bytes]
+
+  The SERVICE_KEY_TYPE field indicates the type of the introduction
+  point service key and the type of the MAC to use in for
+  HANDSHAKE_AUTH. Recognized types are:
+      [00, 01] -- Reserved for legacy introduction cells; see
+                  [LEGACY_EST_INTRO below]
+      [02] -- Ed25519; HMAC-SHA256.
+      [FF] -- Reserved for maintenance messages on existing
+              circuits; see MAINT_INTRO below.
+
+  The SERVER_KEY_LEN field determines the length of the SERVICE_KEY
+  field.  The SERVICE_KEY field contains the public introduction
+  point authentication key.
+
+  The FLAGS field contains the following (big-endian) flags.
+  Unrecognized flags MUST be ignored.
+
+      [XXXXX Define some flags or remove this field.]
+
+  The EXT_FIELD_TYPE, EXT_FIELD_LEN, EXT_FIELD entries are reserved
+  for future extensions to the introduction protocol. Extensions
+  with unrecognized EXT_FIELD_TYPE values must be ignored.
+
+  The ZERO field contains the byte zero; it marks the end of the
+  extension fields.
+
+  The HANDSHAKE_AUTH field contains the MAC of all earlier fields in
+  the cell using as its key the shared per-circuit material ("KH")
+  generated during the circuit extension protocol; see tor-spec.txt
+  section 5.2, "Setting circuit keys".  It prevents replays of
+  ESTABLISH_INTRO cells.
+
+  SIGLEN is the length of the signature.
+
+  SIG is a signature, using SERVER_KEY, of all contents of the cell,
+  up to but not including SIG.  These contents are prefixed with the
+  string "Tor establish-intro cell v1".
+
+  Upon receiving an ESTABLISH_INTRO cell, a Tor node first decodes
+  the key and the signature, and checks the signature.  The node
+  must reject the ESTABLISH_INTRO cell and destroy the circuit in
+  these cases:
+       * If the key type is unrecognized
+       * If the key is ill-formatted
+       * If the signature is incorrect
+       * If the HANDSHAKE_AUTH value is incorrect
+
+       * If the circuit is already a rendezvous circuit.
+       * If the circuit is already an introduction circuit.
+       * If the key is already in use by another circuit.
+
+  Otherwise, the node must associate the key with the circuit, for
+  use later in INTRODUCE1 cells.
+
+  [TODO: The above will work fine with, but it will do quite badly
+  if we ever freak out and want to go back to RSA2048 or bigger.  Do
+  we care?]
+
+3.1.2. Registering an introduction point on a legacy Tor node [LEGACY_EST_INTRO]
+
+  Tor nodes should also support an older version of the
+  ESTABLISH_INTRO cell, first documented in rend-spec.txt.  New
+  hidden service hosts must use this format when establishing
+  introduction points at older Tor nodes that do not support the
+  format above in [EST_INTRO].
+
+  In this older protocol, an ESTABLISH_INTRO cell contains:
+
+        KEY_LENGTH     [2 bytes]
+        KEY            [KEY_LENGTH bytes]
+        HANDSHAKE_AUTH [20 bytes]
+        SIG            [variable, up to end of relay payload]
+
+  The KEY_LENGTH variable determines the length of the KEY field.
+
+  The KEY field is a ASN1-encoded RSA public key.
+
+  The HANDSHAKE_AUTH field contains the SHA1 digest of (KH | "INTRODUCE").
+
+  The SIG field contains an RSA signature, using PKCS1 padding, of
+  all earlier fields.
+
+  Note that since the relay payload itself may be no more than 498
+  bytes long, the KEY_LENGTH field can never had a first byte other
+  than [00] or [01].  These values are used to distinguish legacy
+  ESTABLISH_INTRO cells from newer ones.
+
+  Older versions of Tor always use a 1024-bit RSA key for these
+  introduction authentication keys.
+
+  Newer hidden services MAY use RSA keys up 1904 bits.  Any more
+  than that will not fit in a RELAY cell payload.
+
+3.1.3. Managing introduction circuits
+
+  If the first byte of an ESTABLISH_INTRO cell is [ff], the cell's
+  body contains an administrative command for the circuit.  The
+  format of such a command is:
+
+     Any number of times:
+       SUBCOMMAND_TYPE [2 bytes]
+       SUBCOMMAND_LEN  [2 bytes]
+       SUBCOMMAND      [COMMAND_LEN bytes]
+
+  Recognized SUBCOMMAND_TYPE values are:
+
+       [00 01] -- update encryption keys
+
+  Unrecognized SUBCOMMAND_TYPE values should be ignored.
+
+
+3.1.3.1. Updating encryption keys (subcommand 0001) [UPDATE-KEYS-SUBCMD]
+
+  Hidden service hosts send this subcommand to update the configured
+  public encryption keys associated with this circuit. These keys
+  are given in the form:
+      NUMKEYS         [1 byte]
+      NUMKEYS times:
+        KEYTYPE         [1 byte]
+        KEYLEN          [1 byte]
+        KEY             [KEYLEN bytes]
+      TIMESTAMP       [4 bytes]
+      SIGLEN          [1 byte]
+      SIGNATURE       [SIGLEN bytes.]
+
+  The KEYTPE value [01] is for Curve25519 keys.
+
+  The TIMESTAMP field is a monotonically increasing value across a
+  given introduction point authentication key, but need not
+  correspond to actual time.
+
+  The SIGNATURE must be generated with the introduction point
+  authentication key, and must cover all the entire subcommand body,
+  prefixed with the string "Tor hidden service introduction
+  encryption keys v1".
+
+  [TODO: Nothing is done here to prove ownership of the encryption
+  keys. Does that matter?]
+
+  Setting the encryption keys for a given circuit replaces the
+  previous keys for that circuit.
+
+3.2. Sending an INTRODUCE1 cell to the introduction point.
+
+  In order to participate in the introduction protocol, a client
+  must know the following:
+
+    * An introduction point for a service.
+    * The introduction authentication key for that introduction point.
+    * The introduction encryption key for that introduction point.
+
+  The client sends an INTRODUCE1 cell to the introduction point,
+  containing an identifier for the service, an identifier for the
+  encryption key that the client intends to use, and an opaque blob
+  to be relayed to the hidden service host.
+
+  In reply, the introduction point sends an INTRODUCE_ACK cell back
+  to the client, either informing it that its request has been
+  delivered, or that its request will not succeed.
+
+3.2.1. INTRODUCE1 cell format
+
+  An INTRODUCE1 cell has the following contents:
+
+     AUTH_KEYID      [32 bytes]
+     ENC_KEYID       [8 bytes]
+     Any number of times:
+       EXT_FIELD_TYPE [1 byte]
+       EXT_FIELD_LEN  [1 byte]
+       EXT_FIELD      [EXTRA_FIELD_LEN bytes]
+     ZERO             [1 byte]
+     BLOB            [Up to end of relay payload]
+
+  Upon receiving an INTRODUCE1 cell, the introduction point checks
+  whether AUTH_KEYID and ENC_KEYID match a configured introduction
+  point authentication key and introduction point encryption key.
+  If they do, the cell is relayed; if not, it is not.
+
+  The AUTH_KEYID for an Ed25519 public key is the public key itself.
+  The ENC_KEYID for a Curve25519 public key is the first 8 bytes of
+  the public key.  (This key ID is safe to truncate, since all the
+  keys are generated by the hidden service host, and the ID is only
+  valid relative to a single AUTH_KEYID.)
+
+  To relay an INTRODUCE1 cell, the introduction point sends an
+  INTRODUCE2 cell with exactly the same contents.
+
+3.2.2. INTRODUCE_ACK cell format.
+
+  An INTRODUCE_ACK cell has the following fields:
+     STATUS    [2 bytes]
+     Any number of times:
+       EXT_FIELD_TYPE [1 byte]
+       EXT_FIELD_LEN  [1 byte]
+       EXT_FIELD      [EXTRA_FIELD_LEN bytes]
+
+  Recognized status values are:
+     [00 00] -- Success: cell relayed to hidden service host.
+     [00 01] -- Failure: service ID not recognzied
+     [00 02] -- Failure: key ID not recognized
+     [00 03] -- Bad message format
+
+  The extension field type 0001 is a signed set of encryption keys;
+  its body matches the body of the key update command in
+  [UPDATE-KEYS-CMD].  Whenever sending status [00 02], the
+  introduction point MUST send this extension field.
+
+3.2.3. Legacy formats
+
+  When the ESTABLISH_INTRO cell format of XXXXX
+
+
+
 
 4. The rendezvous prototocol
 
@@ -428,5 +707,9 @@ Appendix A. Signature scheme with key blinding [KEYBLIND]
 Appendix B. Producing a daily shared random value [SHAREDRANDOM]
 
 
-NOTE TO SELF:
- circulate to asn, sysrqb, whomever else.
+
+Appendix C. Selecting nodes [PICKNODES]
+
+  Picking introduction points
+  Picking rendezvous points
+
