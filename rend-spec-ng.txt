@@ -75,6 +75,10 @@
 
    We use the vertical bar | to denote concatenation.
 
+   We use INT_N(val) to denote the network (big-endian) encoding of
+   the unsigned integer "val" in N bytes.  For example, INT_4(1337)
+   is [00 00 05 39].
+
 0.3. Cryptographic building blocks
 
    This specification uses the following cryptographic building blocks:
@@ -165,14 +169,56 @@
    protocol.
 
       32 -- RELAY_COMMAND_ESTABLISH_INTRO
+
+            Sent from hidden service host to introduction point;
+            establishes introduction point.  Discussed in
+            [REG_INTRO_POINT].
+
       33 -- RELAY_COMMAND_ESTABLISH_RENDEZVOUS
+
+            Sent from client to rendezvous point; creates rendezvous
+            point.  Discussed in [EST_REND_POINT].
+
       34 -- RELAY_COMMAND_INTRODUCE1
+
+            Sent from client to introduction point; requests
+            introduction. Discussed in [SEND_INTRO1]
+
       35 -- RELAY_COMMAND_INTRODUCE2
+
+            Sent from client to introduction point; requests
+            introduction. Same format as INTRODUCE1.  Discussed in
+            [FMT_INTRO1] and [PROCESS_INTRO2]
+
       36 -- RELAY_COMMAND_RENDEZVOUS1
+
+            Sent from introduction point to rendezvous point;
+            attempts to join introduction point's circuit to
+            client's circuit. Discussed in [JOIN_REND]
+
       37 -- RELAY_COMMAND_RENDEZVOUS2
+
+            Sent from introduction point to rendezvous point;
+            reports join of introduction point's circuit to
+            client's circuit. Discussed in [JOIN_REND]
+
       38 -- RELAY_COMMAND_INTRO_ESTABLISHED
+
+            Sent from introduction point to hidden service host;
+            reports status of attempt to establish introduction
+            point. Discussed in [INTRO_ESTABLISHED]
+
       39 -- RELAY_COMMAND_RENDEZVOUS_ESTABLISHED
+
+            Sent from rendezvous point to client; acknowledges
+            receipt of ESTABLISH_RENDEZVOUS cell. Discussed in
+            [EST_REND_POINT]
+
       40 -- RELAY_COMMAND_INTRODUCE_ACK
+
+            Sent form introduction point to client; acknowledges
+            receipt of INTRODUCE1 cell and reports success/failure.
+            Discussed in [INTRO_ACK]
 
 0.5. Acknowledgments
 
@@ -358,7 +404,7 @@
 
    [TODO: Finalize this design.]
 
-   [THIS SECTION IS UNFINISHED]
+   [THIS SECTION IS UNFINISHED XXXX]
 
 1.6. In more detail: Backward compatibility with older hidden service
       protocols
@@ -439,7 +485,191 @@
 
       KH from circuit handshake
 
-2. Hidden service descriptors and how they are published [HSDIR]
+2. Generating and publishing hidden service descriptors [HSDIR]
+
+   Hidden service descriptors follow the same metaformat as other
+   Tor directory objects.  They are published anonymously to Tor
+   servers with the HSDir3 flag.
+
+   (Authoritires should assign this flag as they currently assign
+   the HSDir flag, except that they should restrict it to Tor
+   versions implementing the HSDir parts of this specification.)
+
+2.1. Deriving blinded keys and subcredentials [SUBCRED]
+
+   XXXXX writeme
+
+2.2. Locating, uploading, and downloading hidden service descriptors [HASHRNING]
+
+   To avoid attacks where a hidden service's descriptor is easily
+   targetted for censorship, we store them at different directories
+   over time, and use shared random values to prevent those
+   directories from being predicatable far in advance.
+
+   Which Tor servers hosts a hidden service depends on:
+         * the current time period,
+         * the daily subcredential,
+         * the hidden service directories' public keys,
+         * a shared random value that changes in each time period,
+         * a set of network-wide networkstatus consensus parameters.
+
+   Hidden service directories that
+
+2.2.1. Dividing time into periods [TIME-PERIODS]
+
+   To prevent a single set of hidden service directory from becoming
+   a target by adversaries looking to permanently censor a hidden
+   service, hidden service descriptors are uploaded to different
+   locations that change over time.
+
+   The length of a "time period" is controlled by the consensus
+   parameter 'hsdir-interval', and is a number of minutes between 30
+   and 14400 (10 days). The default time period length is 1500 (one
+   day plus one hour).
+
+   Time periods start with the Unix epoch (Jan 1, 1970), and are
+   computed by taking the number of whole minutes since the epoch
+   and dividing by the time period.  So if the current time is
+   2013-11-12 13:44:32 UTC, making the seconds since the epoch
+   1384281872, the number of minutes since the epoch is 23071364.
+   If the current time period length is 1500 (the default), then the
+   current time period number is 15380.  It began 15380*1500*60
+   seconds after the epoch at 2013-11-11 20:00:00 UTC, and will end
+   at (15380+1)*1500*60 seconds after the epoch at 2013-11-12
+   21:00:00 UTC.
+
+2.2.2. Overlapping time periods to avoid thundering herds [TIME-OVERLAP]
+
+   If every hidden service host were to generate a new set of keys
+   and for each time period, the.  Instead, each public key becomes
+   valid at its new location at a deterministic time somewhat
+   _before_ the period begins, depending on the public key and the
+   period.
+
+   The time at which a key might first become valid is determined by
+   the consensus parameter "hsdir-overlap-begins", which is an
+   integer in range [1,100] with default value 80.  This parameter
+   denotes a percentage of the interval for which no overlap occurs.
+   So for the default interval (1500 minutes) and default
+   overlap-begins value (80%), new keys do not become valid for the
+   first 1200 minutes of the interval.
+
+   The new shared random value must be published *before* the start
+   of the next overlap interval by at least enough time to ensure
+   that clients all get it. (XXXXX specify specify)
+
+   The time at which a key from the next interval becomes valid is
+   determined by taking the first two bytes of
+
+     OFFSET = H(Key | INT_8(Next_Period_Num))
+
+   as a big-endian integer, dividing by 65536, and treating that as
+   a fraction of the overlap interval.  (In this foru
+
+   For example, if the period is 1500 minutes long, and overlap
+   interval is 300 minutes long, and OFFSET for begins with [90 50],
+   then the next key becomes valid at 1200 + 300 * (0x9050 / 65536)
+   minutes, or approximately 22 hours and 49 minutes after the
+   beginning of the period.
+
+   [XXXX allow skew--how much?]
+
+   When a client is looking for a service, it must calculate its key
+   both for the current and for the subsequent period, to decide
+   whether the next period's key is valid yet.
+
+2.2.3. Where to publish a service descriptor
+
+   The following consensus parameters control where a hidden service
+   descriptor is stored;
+
+        hsdir_n_replicas = an integer in range [1,16] with default value 2.
+        hsdir_spread_fetch = an integer in range [1,128] with default value 3.
+        hsdir_spread_store = an integer in range [1,128] with default value 3.
+        hsdir_spread_accept = an integer in range [1,128] with default value 8.
+
+   To determine where a given hidden service descriptor will be
+   stored in a given period, after the blinded public key for that
+   period is derived, the uploading or downloading party calculate
+
+        for replicanum in 1...hsdir_n_replicas:
+            hs_index(replicanum) = H("store-at-idx" |
+                                 blinded_public_key | replicanum |
+                                 periodnum)
+
+   where n_replicas is determined by the consensus parameter
+   "hsdir-n-replicas".
+
+   Then, for each node listed in the current consensus with the HSDir3
+   flag, we compute a directory index for that node as:
+
+           hsdir_index(node) = H(node_identity_digest |
+                                 shared_random |
+                                 INT_8(period_num) )
+
+   Finally, for replicanum in 1...hsdir_n_replicas, the hidden
+   service host uploads descriptors to the first hsdir_spread_store
+   nodes whose indices immediately follow hs_index(replicanum).
+
+   When choosing an HSDir to download from, clients choose from
+   among the first hsdir_spread_fetch nodes after the indices.
+
+   An HSDir should rejects a descriptor if that HSDir is not one of
+   the first hsdir_spread_accept HSDirs for that node.
+
+2.2.4. URLs for anonymous uploading and downloading
+
+   Hidden service descriptors conforming to this specification are
+   uploaded with an HTTP POST request the URL
+   /tor/rendezvous3/publish relative to the hidden service
+   directory's root, and downloaded with an HTTP GET request for the
+   URL /tor/rendezvous3/<z> where z is a base-64 encoding of the
+   rendezvous point's blinded public key.
+
+   These requests must be made anonymously, on circuits not used for
+   anything else.
+
+2.3. Publishing shared random values
+
+   Our design for limiting the predictability of HSDir upload
+   locations relies on a shared random value that isn't predictable
+   in advance or too influenceable by an attacker.  The authorities
+   must run a protocol to generate such a value at least once per
+   hsdir period.  Here we describe how they publish these values;
+   the procedure they use to generate them can change independently
+   of the rest of this specification.  For one possible (somewhat
+   broken) protocol, see Appendix [SHAREDRANDOM].
+
+   We add a new line in votes and consensus documents:
+
+       "hsdir-shared-random" PERIOD-START VALUE
+       PERIOD-START = YYYY-MM-DD HH:MM:SS
+       VALUE = A base-64 encoded 256-bit value.
+
+   For each hsdir-shared-random line listed in any vote, that line
+   is included in the consensus if it is listed verbatim in at least
+   three votes, and if no differing line with the same PERIOD-START
+   is listed in more votes.  If two lines have the same PERIOD-START
+   and different VALUEs, ties are broken in favor of the lower VALUE.
+
+   The hs-dir-shared-random lines appear, sorted by PERIOD-START, in
+   the consensus immediately after the "params" line.
+
+   The authorities should publish the shared random value for the
+   current period, and, at a time at least three voting periods
+   before the overlap interval begins, the shared random value for
+   the next period.
+
+2.4. Hidden service descriptors: outer wrapper
+
+  XXXX 
+
+  must include
+      - blinded key
+      - period number
+      - signature
+
+2.5. Hidden service descriptors: encrypted data
 
    XXXXX writeme
 
@@ -450,6 +680,8 @@
        - encryption key to use, what kind it is.
 
      - which onion key formats can I use when extending to rendezvous points?
+
+
 
 3. The introduction protocol
 
@@ -469,7 +701,7 @@
    along the introduction circuit to the hidden service host, and
    acknowledges the introduction request to the client.
 
-3.1. Registering an introduction point
+3.1. Registering an introduction point [REG_INTRO_POINT]
 
 3.1.1. Extensible ESTABLISH_INTRO protocol. [EST_INTRO]
 
@@ -634,7 +866,15 @@
    Setting the encryption keys for a given circuit replaces the
    previous keys for that circuit.
 
-3.2. Sending an INTRODUCE1 cell to the introduction point.
+3.1.4. Acknowledging establishment of introduction point [INTRO_ESTABLISHED]
+
+   After setting up an introduction circuit, the introduction point
+   reports its status back to the hidden service host with an empty
+   INTRO_ESTABLISHED cell.
+
+    [XXXX make extensible]
+
+3.2. Sending an INTRODUCE1 cell to the introduction point. [SEND_INTRO1]
 
    In order to participate in the introduction protocol, a client
    must know the following:
@@ -652,7 +892,7 @@
    to the client, either informing it that its request has been
    delivered, or that its request will not succeed.
 
-3.2.1. INTRODUCE1 cell format
+3.2.1. INTRODUCE1 cell format [FMT_INTRO1]
 
    An INTRODUCE1 cell has the following contents:
 
@@ -682,7 +922,7 @@
    To relay an INTRODUCE1 cell, the introduction point sends an
    INTRODUCE2 cell with exactly the same contents.
 
-3.2.2. INTRODUCE_ACK cell format.
+3.2.2. INTRODUCE_ACK cell format. [INTRO_ACK]
 
    An INTRODUCE_ACK cell has the following fields:
      STATUS    [2 bytes]
@@ -723,7 +963,7 @@
    size for these INTRODUCE1 cells must always be at least 246 bytes,
    or they will be rejected as invalid.
 
-3.3. Processing an INTRODUCE2 cell at the hidden service.
+3.3. Processing an INTRODUCE2 cell at the hidden service. [PROCESS_INTRO2]
 
    Upon receiving an INTRODUCE2 cell, the hidden service host checks
    whether the AUTH_KEYID/AUTH_KEYID_HASH field and the ENC_KEYID
@@ -886,7 +1126,7 @@
    relay forwards the contents of the RENDEZVOUS cell to the client, and
    joins the two circuits together.
 
-4.1. Establishing a rendezvous point
+4.1. Establishing a rendezvous point [EST_REND_POINT]
 
    Alice sends the rendezvous point an ESTABLISH_RENDEZVOUS containing a
    20-byte value.
@@ -904,7 +1144,7 @@
    Upon receiving a RELAY_COMMAND_ESTABLISH_RENDEZVOUS cell, the
    rendezvous point the cookie with the circuit on which it was sent. It
    replies to Alice with an empty RELAY_COMMAND_RENDEZVOUS_ESTABLISHED
-   cell to indicate success.
+   cell to indicate success.     [XXXX make extensible]
 
    The client MUST NOT use the circuit which sent the cell for any
    purpose other than rendezvous with the given location-hidden service.
@@ -912,7 +1152,7 @@
    The client should establish a rendezvous point BEFORE trying to
    connect to a hidden service.
 
-4.2. Joining to a rendezvous point
+4.2. Joining to a rendezvous point [JOIN_REND]
 
    To complete a rendezvous, the hidden service host connects to the
    rendezvous point and says:
@@ -920,8 +1160,10 @@
        HANDSHAKE_INFO             [variable; depends on handshake type
                                    used.]
 
-
-  XXXXXX write more
+   If the cookie matches the rendezvous cookie set on any
+   not-yet-connected circuit on the rendezvous point, the hidden
+   service connects the two circuits, and sends a RENDEZVOUS2 cell
+   from 
 
 
 4.3. Using legacy hosts as rendezvous points
@@ -1084,4 +1326,8 @@ Appendix C. Selecting nodes [PICKNODES]
 
   Picking introduction points
   Picking rendezvous points
+  Building paths
+  Reusing circuits
+
+  XXXX
 
