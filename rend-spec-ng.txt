@@ -417,13 +417,14 @@
 
 1.7. In more detail: Offline operation
 
-   In this design, a hidden service's secret identity key may be stored
-   offline.  It's used only to generate blinded identity keys, which are
-   used to sign descriptor signing keys.  In order to operate a hidden
-   service, the operator can generate a number of descriptor signing
-   keys and their certifications[SEE BELOW XXXXX], and their
-   corresponding descriptor encryption keys, and export those to the
-   hidden service hosts.
+   In this design, a hidden service's secret identity key may be
+   stored offline.  It's used only to generate blinded identity
+   keys, which are used to sign descriptor signing keys.  In order
+   to operate a hidden service, the operator can generate a number
+   of descriptor signing keys and their certifications (see
+   [DESC-OUTER] and [ENCRYPTED-DATA] below), and their corresponding
+   descriptor encryption keys, and export those to the hidden
+   service hosts.
 
 1.8. In more detail: Encryption Keys And Replay Resistance
 
@@ -521,7 +522,7 @@
          credential |
          blinded-public-key).
 
-2.2. Locating, uploading, and downloading hidden service descriptors [HASHRNING]
+2.2. Locating, uploading, and downloading hidden service descriptors [HASHRING]
 
    To avoid attacks where a hidden service's descriptor is easily
    targeted for censorship, we store them at different directories
@@ -594,7 +595,10 @@
    minutes, or approximately 22 hours and 49 minutes after the
    beginning of the period.
 
-   [XXXX allow skew--how much?]
+   Hidden service directories should accept descriptors at least
+   [TODO: how much?] minutes before they would become value, and
+   retain them for at least [TODO: how much?] minutes after the end
+   of the period.
 
    When a client is looking for a service, it must calculate its key
    both for the current and for the subsequent period, to decide
@@ -682,7 +686,7 @@
    before the overlap interval begins, the shared random value for
    the next period.
 
-2.4. Hidden service descriptors: outer wrapper
+2.4. Hidden service descriptors: outer wrapper [DESC-OUTER]
 
    The format for a hidden service descriptor is as follows, using
    the meta-format from dir-spec.txt.
