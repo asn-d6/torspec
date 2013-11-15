@@ -27,7 +27,8 @@
 
    Other features include:
 
-     * XXXX WRITEME
+     * [TODO: WRITE ME once there have been some more drafts and we know what
+       the summary should say.]
 
    Participants:
 
@@ -55,7 +56,8 @@
 
 0.1. Improvements over previous versions.
 
-    XXXX writeme
+    [TODO write me once there have been more drafts and we know what the
+    summary should say.]
 
 0.2. Notation and vocabulary
 
@@ -222,7 +224,7 @@
 
 0.5. Acknowledgments
 
-   XXXX reformat these once the lists are more complete.
+   [TODO reformat these once the lists are more complete.]
 
    This design includes ideas from many people, including
      Christopher Baines,
@@ -355,10 +357,10 @@
    from becoming a good DoS target for removing a hidden service.
 
    For each period, the Tor directory authorities agree upon a
-   collaboratively generated random value (See appendix [SHAREDRANDOM].)
-   That value, combined with hidden service directories' public
-   identity keys, determines their position in the hash ring for
-   descriptors made in that period. [XXXX is this quite what I mean?]
+   collaboratively generated random value (See appendix
+   [SHAREDRANDOM].)  That value, combined with hidden service
+   directories' public identity keys, determines the HSDirs'
+   position in the hash ring for descriptors made in that period.
 
    Each hidden service's descriptors placed into the ring in positions
    based on the key that was used to sign them.  Note that hidden
@@ -404,8 +406,6 @@
 
    [TODO: Finalize this design.]
 
-   [THIS SECTION IS UNFINISHED XXXX]
-
 1.6. In more detail: Backward compatibility with older hidden service
       protocols
 
@@ -428,7 +428,12 @@
 
 1.8. In more detail: Encryption Keys And Replay Resistance
 
-   XXXXXXXXXXX WRITEME
+   To avoid replays of an introduction request by an introduction
+   point, a hidden service host must never accept the same request
+   twice. Earlier versions of the hidden service design used a
+   authenticated timestamp here, but including a view of the current
+   time can create a problematic fingerprint.  (See proposal 222 for
+   more discussion.)
 
 1.9. In more detail: A gallimaufry of keys
 
@@ -441,9 +446,9 @@
       Master (hidden service) identity key -- A master signing keypair used
         as the identity for a hidden service.  This key is not used on
         its own to sign anything; it is only used to generate blinded
-        identity keys as described in [KEYBLIND] and [XXXX].
+        signing keys as described in [KEYBLIND] and [SUBCRED].
 
-      Blinded identity key -- A keypair derived from the identity key,
+      Blinded signing key -- A keypair derived from the identity key,
         used to sign descriptor signing keys. Changes periodically for
         each service. Clients who know a 'credential' consisting of the
         service's public identity key and an optional secret can derive
@@ -451,8 +456,8 @@
         as an index in the DHT-like structure of the directory system.
 
       Descriptor signing key -- A key used to sign hidden service
-        descriptors.  This is signed by blinded identity keys. Unlike
-        blinded identity keys and master identity keys, the secret part
+        descriptors.  This is signed by blinded signing keys. Unlike
+        blinded signing keys and master identity keys, the secret part
         of this key must be stored online by hidden service hosts.
 
       Introduction point authentication key -- A short-term signing keypair
@@ -483,7 +488,9 @@
 
    Symmetric key-like things defined elsewhere:
 
-      KH from circuit handshake -XXXX explain
+      KH from circuit handshake -- An unpredictable value derived as
+      part of the Tor circuit extension handshake, used to tie a
+      request to a particular circuit.
 
 2. Generating and publishing hidden service descriptors [HSDIR]
 
@@ -579,7 +586,7 @@
 
    The new shared random value must be published *before* the start
    of the next overlap interval by at least enough time to ensure
-   that clients all get it. (XXXXX specify specify)
+   that clients all get it. [TODO: how much earlier?]
 
    The time at which a key from the next interval becomes valid is
    determined by taking the first two bytes of
@@ -642,6 +649,11 @@
 
    An HSDir should rejects a descriptor if that HSDir is not one of
    the first hsdir_spread_accept HSDirs for that node.
+
+   [TODO: Incorporate the findings from proposal 143 here.  But
+   watch out: proposal 143 did not analyze how much the set of nodes
+   changes over time, or how much client and host knowledge might
+   diverge.]
 
 2.2.4. URLs for anonymous uploading and downloading
 
@@ -759,8 +771,8 @@
        MAC        MAC of both above fields        [32 bytes]
 
    Before encryption, the plaintext must be padded to a multiple of
-   1 KB with NUL bytes.  The plaintext must not be longer than XXXXX
-   KB.
+   1 KB with NUL bytes.  The plaintext must not be longer than ??? KB.
+   [TODO: how much? Should this be a parameter?]
 
    The plaintext format is:
 
@@ -771,6 +783,15 @@
       A space-separated list of integers denoting CREATE2 cell
       format numbers that the server recognizes.  Must include at
       least TAP and ntor.
+
+     "authentication-required" SP types NL
+
+      [At most once]
+
+      A space-separated list of authentication types. A client that
+      does not support at least one of these authentication types
+      will not be able to contact the host.  Recognized types are:
+      'password' and 'ed25519'.  See [INTRO-AUTH] below.
 
      At least once:
 
@@ -859,7 +880,7 @@
    The FLAGS field contains the following (big-endian) flags.
    Unrecognized flags MUST be ignored.
 
-      [XXXXX Define some flags or remove this field.]
+      [TODO: Define some flags or remove this field.]
 
    The EXT_FIELD_TYPE, EXT_FIELD_LEN, EXT_FIELD entries are reserved
    for future extensions to the introduction protocol. Extensions
@@ -994,7 +1015,8 @@
    reports its status back to the hidden service host with an empty
    INTRO_ESTABLISHED cell.
 
-    [XXXX make extensible]
+    [TODO: make this cell type extensible.  It should be able to
+    include data if that turns out to be needed.]
 
 3.2. Sending an INTRODUCE1 cell to the introduction point. [SEND_INTRO1]
 
@@ -1027,7 +1049,9 @@
      ZERO             [1 byte]
      ENCRYPTED        [Up to end of relay payload]
 
-   (XXXX Add a field to determine the type of ENCRYPTED?)
+   [TODO: Should we have a field to determine the type of ENCRYPTED,
+   or should we instead assume that there is exactly one encryption
+   key per encryption method? The latter is probably safer.]
 
    Upon receiving an INTRODUCE1 cell, the introduction point checks
    whether AUTH_KEYID and ENC_KEYID match a configured introduction
@@ -1190,13 +1214,11 @@
              x,X = KEYGEN()
    and computes:
              secret_hs_input = EXP(B,x) | AUTH_KEYID | X | B | PROTOID
-             info = m_hsexpand | credential
+             info = m_hsexpand | subcredential
              hs_keys = HKDF(secret_hs_input, t_hsenc, info,
                             S_KEY_LEN+MAC_LEN)
              ENC_KEY = hs_keys[0:S_KEY_LEN]
              MAC_KEY = hs_keys[S_KEY_LEN:S_KEY_LEN+MAC_KEY_LEN]
-
-   (XXXX can't use credential here; use daily symmetric thing instead)
 
    and sends as the INTRODUCE1 cell body:
 
@@ -1214,7 +1236,7 @@
    MAC field is a MAC of all of the cell from the AUTH_KEYID through the
    end of ENCRYPTED_DATA, using the MAC_KEY value as its key.
 
-   [TODO: should we have a cheap proof of knowledge of the credential
+   [TODO: should we have a cheap proof of knowledge of the subcredential
    before we do the public key operation?]
 
    To process this format, the hidden service checks PK_VALID(CLIENT_PK)
@@ -1225,18 +1247,65 @@
    computes the plaintext by decrypting ENCRYPTED_DATA.
 
    The hidden service host now completes the ntor handshake with the
-   modified PROTOID as given above, and is ready to send SERVER_PK and
-   AUTH to the client.  The keys generated by the handshake will be used
-   to encrypt and authenticate data end-to-end between the client and
-   the server.
+   modified PROTOID as given above.  It is ready to send the rest of
+   the ntor handshake (SERVER_PK and AUTH) to the client via a
+   RENDEZVOUS1 cell.  (See [JOIN_REND] below.) The hidden service
+   host now also knows the keys generated by the handshake, which it
+   will use to encrypt and authenticate data end-to-end between the
+   client and the server.
 
-   XXXX describe handshake data
+3.4. Authentication during the introduction phase. [INTRO-AUTH]
 
-   XXXX describe security issues; discuss
+   Hidden services may restrict access only to authorized users.
+   One mechanism to do so is the credential mechanism, where only
+   users who know the credential for a hidden service may connect at
+   all.  For more fine-grained conntrol, a hidden service can be
+   configured with password-based or public-key-based
+   authentication.
 
-3.4. Authentication during the introduction phase.
+3.4.1. Password-based authentication.
 
-   XXXX writeme
+   To authenticate with a password, the user must include an
+   extension field in the encrypted part of the INTRODUCE cell with
+   an EXT_FIELD_TYPE type of [01] and the contents:
+     Username [00] Password.
+
+   The username may not include any [00] bytes. The password may.
+
+   On the server side, the password MUST be stored hashed and
+   salted, ideally with scrypt or something better.
+
+3.4.2. Ed25519-based authentication.
+
+   To authenticate with an Ed25519 private key, the user must
+   include an extension field in the encrypted part of the INTRODUCE
+   cell with an EXT_FIELD_TYPE type of [02] and the contents:
+
+        Nonce     [16 bytes]
+        Pubkey    [32 bytes]
+        Signature [64 bytes]
+
+   Nonce is a random value.  Pubkey is the public key that will be
+   used to authenticate.  [TODO: should this be an identifier for
+   the public key instead?]  Signature is the signature, using
+   Ed25519, of:
+
+        "Hidserv-userauth-ed25519"
+        Nonce       (same as above)
+        Pubkey      (same as above)
+        AUTH_KEYID  (As in the INTRODUCE1 cell)
+        ENC_KEYID   (As in the INTRODUCE1 cell)
+
+   The hidden service host checks this by seeing whether it
+   recognizes and would accept a signature from the provided public
+   key.  If it would, then it checks whether the signature is
+   correct.  If it is, then the correct user has authenticated.
+
+   Replay prevention on the whole cell is sufficient to prevent
+   replays on the authentication.
+
+   Users SHOULD NOT use the same public key with multiple hidden
+   services.
 
 4. The rendezvous protocol
 
@@ -1292,6 +1361,10 @@
    Upon receiving the RENDEZVOUS2 cell, the client verifies that the
    HANDSHAKE_INFO correctly completes a handshake, and uses the
    handshake output to derive shared keys for use on the circuit.
+
+   [TODO: Should we encrypt HANDSHAKE_INFO as we did INTRODUCE2
+   contents? It's not necessary, but it could be wise.  Similarly,
+   we should make it extensible.]
 
 4.3. Using legacy hosts as rendezvous points
 
@@ -1391,8 +1464,8 @@ Appendix B. Producing a daily shared random value [SHAREDRANDOM]
   256-bit random value R.
 
   During the rest of phase 1, every authority collects the
-  commitments from other authorities. (XXXX say more)
-
+  commitments from other authorities, and publishes them to other
+  authorities, as they do today with directory votes.
 
   At the start of phase 2, each participating authority publishes:
       shared-random 1
@@ -1413,7 +1486,7 @@ Appendix B. Producing a daily shared random value [SHAREDRANDOM]
   in phase 1. All other fields are as in the commitments.
 
   During the rest of phase 2, every authority collects the
-  reveals from other authorities. (XXXX say more)
+  reveals from other authorities, as above with commitments.
 
   At the start of phase 3, each participating authority either has a
   reveal from every authority that it received a commitment from, or
@@ -1466,5 +1539,5 @@ Appendix C. Selecting nodes [PICKNODES]
   Building paths
   Reusing circuits
 
-  XXXX
+  (TODO: This needs a writeup)
 
