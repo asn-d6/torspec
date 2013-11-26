@@ -331,18 +331,38 @@
    or processes configured by the server; RELAY_DATA cells are used to
    communicate data on those streams, and so forth.
 
-1.2. In more detail: naming hidden services
+1.2. In more detail: naming hidden services [NAMING]
 
-   A hidden service is named based on a long-term public "identity key".
-   This key is used to generate a special "onion address" usable by the
-   Tor software. A public identity key K corresponds to the onion
-   address "Enc(K).onion", where Enc is a base-32 encoding of K.
+   A hidden service's name is its long term master identity key.
+   This is encoded as a hostname by encoding the entire key in Base
+   32, and adding the string ".onion" at the end.
 
-   Client software recognizes these addresses, extracts the keys, and
-   uses those to locate and authenticate hidden services.
+   (This is a change from older versions of the hidden service
+   protocol, where we used an 80-bit truncated SHA1 hash of a 1024
+   bit RSA key.)
 
-   These keys are not used for direct signing operations.  See sections
-   [IMD:AC] and [IMD:DIST] below.
+   The names in this format are distinct from earlier names because
+   of their length.  An older key might look like:
+
+        unlikelynamefora.onion
+        yyhws9optuwiwsns.onion
+
+   And a key following this specification might look like:
+
+        a1uik0w1gmfq3i5ievxdm9ceu27e88g6o7pe0rffdw9jmntwkdsd.onion
+
+   Note that since master keys are 32 bytes long, and 52 bytes of
+   base 32 encoding can hold 260 bits of information, we have four
+   unused bits in each of these names.
+
+   [TODO: Alternatively, we could require that the first bit of the
+   master key always be zero, and use a 51-byte encoding.  Or we
+   could require that the first two bits be zero, and use a 51-byte
+   encoding and reserve the first bit.  Or we could require that the
+   first nine bits, or ten bits be zero, etc.]
+
+   [TODO: Some statement to the effect that memorable names are
+   awesome, but they should go in another proposal/specification.]
 
 1.3. In more detail: Access control [IMD:AC]
 
