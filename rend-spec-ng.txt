@@ -362,9 +362,6 @@
    encoding and reserve the first bit.  Or we could require that the
    first nine bits, or ten bits be zero, etc.]
 
-   [TODO: Some statement to the effect that memorable names are
-   awesome, but they should go in another proposal/specification.]
-
 1.3. In more detail: Access control [IMD:AC]
 
    Access control for a hidden service is imposed at multiple points
@@ -1462,6 +1459,23 @@
    these keys before other encryption.  The client encrypts with Kf
    and decrypts with Kb; the service host does the opposite.
 
+6. Open Questions:
+
+   Scaling hidden services is hard. There are on-going discussions
+   that you might be able to help with. See [SCALING-REFS].
+
+   How can we improve the HSDir unpredictability design proposed in
+   [SHAREDRANDOM]? See [SHAREDRANDOM-REFS] for discussion.
+
+   How can hidden service addresses become memorable while retaining
+   their self-authenticating and decentralized nature? See
+   [HUMANE-HSADDRESSES-REFS] for some proposals.
+
+   Hidden Services are pretty slow. Both because of the lengthy setup
+   procedure and because the final circuit has 6 hops. How can we make
+   the Hidden Service protocol faster? See [PERFORMANCE-REFS] for some
+   suggestions.
+
 References:
 
 [KEYBLIND-REFS]:
@@ -1475,6 +1489,17 @@ References:
 
 [SCALING-REFS]:
         https://lists.torproject.org/pipermail/tor-dev/2013-October/005556.html
+
+[HUMANE-HSADDRESSES-REFS]:
+        https://gitweb.torproject.org/torspec.git/blob/HEAD:/proposals/ideas/xxx-onion-nyms.txt
+        http://archives.seul.org/or/dev/Dec-2011/msg00034.html
+
+[PERFORMANCE-REFS]:
+        "Improving Efficiency and Simplicity of Tor circuit
+        establishment and hidden services" by Overlier, L., and
+        P. Syverson
+
+        [TODO: Need more here! Do we have any? :( ]
 
 [ATTACK-REFS]:
         "Trawling for Tor Hidden Services: Detection, Measurement,
