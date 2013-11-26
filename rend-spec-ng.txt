@@ -268,6 +268,7 @@
      Ivan Pustogarov,
      Paul Syverson
      Ralf-Philipp Weinmann,
+   See [ATTACK-REFS] for their papers.
 
    Several of these ideas have come from conversations with
       Christian Grothoff,
@@ -446,6 +447,8 @@
    above), we need a way to fail over from one host to another. We also
    need a way to coordinate between the hosts.  This is as yet
    undesigned.  Maybe it should use a hidden service?
+
+   See [SCALING-REFS] for discussion on this topic.
 
    [TODO: Finalize this design.]
 
@@ -1459,6 +1462,27 @@
    these keys before other encryption.  The client encrypts with Kf
    and decrypts with Kb; the service host does the opposite.
 
+References:
+
+[KEYBLIND-REFS]:
+        https://trac.torproject.org/projects/tor/ticket/8106
+        https://lists.torproject.org/pipermail/tor-dev/2012-September/004026.html
+
+[SHAREDRANDOM-REFS]:
+        https://trac.torproject.org/projects/tor/ticket/8244
+        https://lists.torproject.org/pipermail/tor-dev/2013-November/005847.html
+        https://lists.torproject.org/pipermail/tor-talk/2013-November/031230.html
+
+[SCALING-REFS]:
+        https://lists.torproject.org/pipermail/tor-dev/2013-October/005556.html
+
+[ATTACK-REFS]:
+        "Trawling for Tor Hidden Services: Detection, Measurement,
+        Deanonymization" by Alex Biryukov, Ivan Pustogarov,
+        Ralf-Philipp Weinmann
+
+        "Locating Hidden Servers" by Lasse Øverlier and Paul Syverson
+
 
 Appendix A. Signature scheme with key blinding [KEYBLIND]
 
@@ -1518,10 +1542,10 @@ Appendix A. Signature scheme with key blinding [KEYBLIND]
           = rB + (hash(R,A',M)ah)B
           = R + hash(R,A',M)A' )
 
-  See https://trac.torproject.org/projects/tor/ticket/8106 for an
-  extensive discussion of alternatives here.  I've transcribed this
-  from a description by Tanja Lange at the end of the thread. [TODO:
-  We'll want a proof for this.]
+  See [KEYBLIND-REFS] for an extensive discussion on this scheme and
+  possible alternatives.  I've transcribed this from a description by
+  Tanja Lange at the end of the thread. [TODO: We'll want a proof for
+  this.]
 
   (To use this with Tor, set N = INT_8(period-number) | INT_8(Start
   of period in seconds since epoch).)
@@ -1632,8 +1656,7 @@ Appendix B. Producing a daily shared random value [SHAREDRANDOM]
 
   (XXXX describe how to start over)
 
-  See https://trac.torproject.org/projects/tor/ticket/8244 for more
-  discussion here.
+  See [SHAREDRANDOM-REFS] for more discussion here.
 
   (TODO: should this be its own spec?  If so, does it have to use
   our regular metaformat or can it use something less sucky?)
