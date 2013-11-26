@@ -1315,7 +1315,7 @@
 
    and sends as the INTRODUCE1 cell body:
 
-            AUTH_KEYID/AUTH_KEYID_HASH  [20 or 32 bytes]
+            AUTH_KEYID                  [32 bytes]
             ENC_KEYID                   [8 bytes]
             Any number of times:
                EXT_FIELD_TYPE [1 byte]
