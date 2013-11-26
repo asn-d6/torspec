@@ -1,4 +1,15 @@
-[weasel: inconsistent: one or two spaces after sentences?]
+[XXXX FINAL EDIT TODOs:
+    one or two spaces after sentences?  Decide.
+
+    Split appendix B into its own thing.
+
+    Reflow.
+
+    Apply tor-design vocab filter.
+]
+
+
+
 
 
                  Next-Generation Hidden Services in Tor
@@ -35,9 +46,8 @@
 
       Operator -- A person running a hidden service
 
-      Host, "Server" -- The software run by the operator to provide a
-         hidden service
-[weasel: Is that apache or is that Tor, or is it both?]
+      Host, "Server" -- The Tor software run by the operator to
+         provide a hidden service.
 
       User -- A person contacting a hidden service.
 
@@ -91,17 +101,16 @@
         bytes and k is a key of length S_KEY_LEN bytes.
 
       * A public key signature system SIGN_KEYGEN()->seckey, pubkey;
-        SIGN_SIGN(seckey,msg)->sig; and SIGN_CHECK(sig, msg) -> { "OK",
+        SIGN_SIGN(seckey,msg)->sig; and SIGN_CHECK(pubkey, sig, msg) -> { "OK",
         "BAD" }; where secret keys are of length SIGN_SECKEY_LEN bytes,
         public keys are of length SIGN_PUBKEY_LEN bytes, and signatures
         are of length SIGN_SIG_LEN bytes.
-[weasel: SIGN_CHECK also needs the pubkey]
 
-        This signature system must also support key blinding operations
-[weasel: What is key blinding?]
+        This signature system must also support key blinding
+        operations as discussed in appendix [KEYBLIND] and in
+        section [SUBCRED]:
         SIGN_BLIND_SECKEY(seckey, blind)->seckey2 and
-        SIGN_BLIND_PUBKEY(pubkey, blind)->pubkey2 that meet the
-        requirements discussed in appendix [KEYBLIND].
+        SIGN_BLIND_PUBKEY(pubkey, blind)->pubkey2 .
 
       * A public key agreement system "PK", providing
         PK_KEYGEN()->seckey, pubkey; PK_VALID(pubkey) -> {"OK", "BAD"};
@@ -116,9 +125,8 @@
       * A cryptographic message authentication code MAC(key,msg) that
         produces outputs of length MAC_LEN bytes.
 
-      * A key derivation function KDF(input, salt, personalization, n) that
-        outputs n bytes.
-[weasel: is "input" clear here?  should it be "key"?]
+      * A key derivation function KDF(key data, salt, personalization, n)
+        that outputs n bytes.
 
    As a first pass, I suggest:
 
@@ -162,7 +170,7 @@
    (TLS-over-TCP, IPv4) and [02] (legacy node identity).
 
    We also incorporate Tor's circuit extension handshakes, as used in
-   CREATE2 and CREATED2 cells described in tor-spec.txt.  In these
+   the CREATE2 and CREATED2 cells described in tor-spec.txt.  In these
    handshakes, a client who knows a public key for a server sends a
    message and receives a message from that server.  Once the exchange
    is done, the two parties have a shared set of forward-secure key
@@ -266,6 +274,16 @@
       Brian Warner,
       Zooko Wilcox-O'Hearn,
 
+   And if this document makes any sense at all, it's thanks to
+   editing help from
+      George Kadianakis,
+      Peter Palfrader,
+
+
+   [XXX  Acknowledge Team 8106.]
+   [XXX  Acknowledge Team 8244.]
+
+
    Please forgive me if I've missed you; please forgive me if I've
    misunderstood your best ideas here too.
 
@@ -291,8 +309,7 @@
 
    When a client wants to connect to a hidden service, it first chooses
    a Tor node at random to be its "rendezvous point" and builds a
-   circuit to that rendezvous point.  If the does not have an up-to-date
-[weasel:                                   ^^ client?]
+   circuit to that rendezvous point.  If the client does not have an up-to-date
    descriptor for the service, it contacts an appropriate HSDir and
    requests such a descriptor.
 
@@ -316,13 +333,10 @@
 
 1.2. In more detail: naming hidden services
 
-   A hidden service is named based on a long term public "identity key".
+   A hidden service is named based on a long-term public "identity key".
    This key is used to generate a special "onion address" usable by the
    Tor software. A public identity key K corresponds to the onion
    address "Enc(K).onion", where Enc is a base-32 encoding of K.
-
-[weasel: "encoding" implies there's a bijective function and that from Enc(K) I
-         can get K again.  This is not the case here.]
 
    Client software recognizes these addresses, extracts the keys, and
    uses those to locate and authenticate hidden services.
@@ -444,8 +458,7 @@
    time can create a problematic fingerprint.  (See proposal 222 for
    more discussion.)
 
-1.9. In more detail: A gallimaufry of keys
-[weasel: unknown word.  while funny, maybe not well suited for a final version.]
+1.9. In more detail: A menagerie of keys
 
    [In the text below, an "encryption keypair" is roughly "a keypair you can
    do Diffie-Hellman with" and a "signing keypair" is roughly "a keypair
@@ -1022,7 +1035,9 @@
    who have seen a key before distinguishable from ones who have not.]
 
    Setting the encryption keys for a given circuit replaces the
-   previous keys for that circuit.
+   previous keys for that circuit.  Clients who attempt to connect
+   using the old key receive an INTRO_ACK cell with error code [00
+   02] as described in section [INTRO_ACK] below.
 
 3.1.4. Acknowledging establishment of introduction point [INTRO_ESTABLISHED]
 
@@ -1413,25 +1428,47 @@
 
 Appendix A. Signature scheme with key blinding [KEYBLIND]
 
-  We propose the following scheme for key blinding, based on Ed25519.
-[weasel: What is key blinding?]
+  As described in [IMD:DIST] and [SUBCRED] above, we require a "key
+  blinding" system that works (roughly) as follows:
+
+        There is a master keypair (sk, pk).
+
+        Given the keypair and a nonce n, there is a derivation
+        function that gives a new blinded keypair (sk_n, pk_n).
+        This keypair can be used for signing.
+
+        Given only the public key and the nonce, there is a function
+        that gives pk_n.
+
+        Without knowing pk, it is not possible to derive pk_n;
+        without knowing sk, it is not possible to derive sk_n.
+
+        It's possible to check that a signature make with sk_n while
+        knowing only pk_n.
+
+        Someone who sees a large number of blinded public keys and
+        signatures made using those public keys can't tell which
+        signatures and which blinded keys were derived from the same
+        master keypair.
+
+        You can't forge signatures.
+
+        [TODO: Insert a more rigorous definition and better references.]
+
+
+  We propose the following scheme for key blinding, based on
+  Ed25519.
+
+  (This is an ECC group, so remember that scalar multiplication is the
+  trapdoor function, and it's defined in terms of iterated point
+  addition. See the Ed25519 paper [XXX cite] for a fairly clear writeup.)
 
   Let the basepoint be written as B. Assume B has prime order l, so
   lB=0.  Let a master keypair be written as (a,A), where a is the
   private key and A is the public key (A=aB).
-[weasel: Is it obivous that we are working in a ECC DH group where
-  multiplication is the trapdoor function as opposed to exponentiation
-  used in Z* based DH groups?  Should this be spelled out?]
 
-  To compute the daily key for a period p, represent that period
-  as INT_8(period-number) | INT_8(Start of period in seconds since
-  epoch). Then compute the blinding factor h as H(credential, B, p),
-  and let:
-[weasel: Does this mean that p = INT_8(period-number) | INT_8(Start of period
- in seconds sinceepoch)?  What is period-number?  What is credential?
- Why are concepts like periods in the general description of a key blinding
- scheme?
-]
+  To derive the key for a nonce N and an optional secret s, compute
+  the blinding factor h as H(A | s, B, N), and let:
 
       private key for the period:   a' = h a
       public key for the period:    A' = h' A = (ha)B
@@ -1449,8 +1486,11 @@ Appendix A. Signature scheme with key blinding [KEYBLIND]
 
   See https://trac.torproject.org/projects/tor/ticket/8106 for an
   extensive discussion of alternatives here.  I've transcribed this
-  from a description by Tanja Lange at the end of the thread. TODO:
-  We'll want a proof for this.
+  from a description by Tanja Lange at the end of the thread. [TODO:
+  We'll want a proof for this.]
+
+  (To use this with Tor, set N = INT_8(period-number) | INT_8(Start
+  of period in seconds since epoch).)
 
 Appendix B. Producing a daily shared random value [SHAREDRANDOM]
 
