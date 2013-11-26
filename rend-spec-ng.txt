@@ -515,6 +515,40 @@
       part of the Tor circuit extension handshake, used to tie a
       request to a particular circuit.
 
+(1.5). Identifying hidden services [NAMING]
+
+   A hidden service's name is its long term master identity key.
+   This is encoded as a hostname by encoding the entire key in Base
+   32, and adding the string ".onion" at the end.
+
+   (This is a change from older versions of the hidden service
+   protocol, where we used an 80-bit truncated SHA1 hash of a 1024
+   bit RSA key.)
+
+   The names in this format are distinct from earlier names because
+   of their length.  An older key might look like:
+
+        unlikelynamefora.onion
+        yyhws9optuwiwsns.onion
+
+   And a key following this specification might look like:
+
+        a1uik0w1gmfq3i5ievxdm9ceu27e88g6o7pe0rffdw9jmntwkdsd.onion
+
+   Note that since master keys are 32 bytes long, and 52 bytes of
+   base 32 encoding can hold 260 bits of information, we have four
+   unused bits in each of these names.
+
+   [TODO: Alternatively, we could require that the first bit of the
+   master key always be zero, and use a 51-byte encoding.  Or we
+   could require that the first two bits be zero, and use a 51-byte
+   encoding and reserve the first bit.  Or we could require that the
+   first nine bits, or ten bits be zero, etc.]
+
+   [TODO: Some statement to the effect that memorable names are
+   awesome, but they should go in another proposal/specification.]
+
+
 [weasel: XXX]
 2. Generating and publishing hidden service descriptors [HSDIR]
 
@@ -1612,4 +1646,38 @@ Appendix C. Selecting nodes [PICKNODES]
   Reusing circuits
 
   (TODO: This needs a writeup)
+
+Appendix D. Recommendations for searching for vanity .onions [VANITY]
+
+  EDITORIAL NOTE: The author thinks that it's silly to brute-force
+  the keyspace for a key that, when base-32 encoded, spells out the
+  name of your website.  It also feels a bit dangerous to me.  If
+  you train your users to connect to
+      llamanymityx4fi3l6x2gyzmtmgxjyqyorj9qsb5r543izcwymle.onion
+  I worry that you're making it easier for somebody to trick them
+  into connecting to
+      llamanymityb4sqi0ta0tsw6uovyhwlezkcrmczeuzdvfauuemle.onion
+
+  Nevertheless, people are probably going to try to do this, so
+  here's a decent algorithm to use.
+
+  To search for a public key with some criterion X:
+
+        Generate a random (sk,pk) pair.
+
+        While pk does not satisfy X:
+
+            Add the number 1 to sk
+            Add the scalar B to pk
+
+        Return sk, pk.
+
+  This algorithm is safe [source: djb, personal communication]
+  [TODO: Make sure I understood correctly!] so long as only the
+  final (sk,pk) pair is used, and all previous values are
+  discarded.
+
+  To parallelize this algorithm, start with an independent (sk,pk)
+  pair generated for each independent thread, and let each search
+  proceed independently.
 
