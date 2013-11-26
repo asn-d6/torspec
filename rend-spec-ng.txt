@@ -860,9 +860,9 @@
    When a hidden service is establishing a new introduction point,
    it sends a ESTABLISH_INTRO cell with the following contents:
 
-     SERVICE_KEY_TYPE [1 byte]
-     SERVICE_KEY_LEN  [1 byte]
-     SERVICE_KEY      [SERVICE_KEY_LEN bytes]
+     AUTH_KEY_TYPE    [1 byte]
+     AUTH_KEY_LEN     [1 byte]
+     AUTH_KEY         [AUTH_KEY_LEN bytes]
      Any number of times:
         EXT_FIELD_TYPE [1 byte]
         EXT_FIELD_LEN  [1 byte]
@@ -872,7 +872,7 @@
      SIGLEN           [1 byte]
      SIG              [SIGLEN bytes]
 
-   The SERVICE_KEY_TYPE field indicates the type of the introduction
+   The AUTH_KEY_TYPE field indicates the type of the introduction
    point authentication key and the type of the MAC to use in for
    HANDSHAKE_AUTH. Recognized types are:
        [00, 01] -- Reserved for legacy introduction cells; see
@@ -882,8 +882,8 @@
                circuits; see MAINT_INTRO below.
                [TODO: Should this just be a new relay cell type?]
 
-   The SERVER_KEY_LEN field determines the length of the SERVICE_KEY
-   field.  The SERVICE_KEY field contains the public introduction
+   The AUTH_KEY_LEN field determines the length of the AUTH_KEY
+   field.  The AUTH_KEY field contains the public introduction
    point authentication key.
 
    The EXT_FIELD_TYPE, EXT_FIELD_LEN, EXT_FIELD entries are reserved
@@ -901,7 +901,7 @@
 
    SIGLEN is the length of the signature.
 
-   SIG is a signature, using SERVER_KEY, of all contents of the cell,
+   SIG is a signature, using AUTH_KEY, of all contents of the cell,
    up to but not including SIG.  These contents are prefixed with the
    string "Tor establish-intro cell v1".
 
