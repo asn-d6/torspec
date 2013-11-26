@@ -1181,7 +1181,7 @@
    [UPDATE-KEYS-CMD].  Whenever sending status [00 02], the
    introduction point MUST send this extension field.
 
-3.2.3. Legacy formats
+3.2.3. Legacy formats [LEGACY-INTRODUCE1]
 
    When the ESTABLISH_INTRO cell format of [LEGACY_EST_INTRO] is
    used, INTRODUCE1 cells are of the form:
@@ -1327,8 +1327,11 @@
                ENCRYPTED_DATA           [Padded to length of plaintext]
                MAC                      [MAC_LEN bytes]
 
-   (This format is as documented in [FMT_INTRO1] above, except that here we
-   describe how to build the ENCRYPTED portion.)
+   (This format is as documented in [FMT_INTRO1] above, except that
+   here we describe how to build the ENCRYPTED portion.  If the
+   introduction point is running an older Tor that does not support
+   this protocol, the first field is replaced by a 20-byte
+   AUTH_KEYID_HASH field as described in [LEGACY-INTRODUCE1].)
 
    Here, the encryption key plays the role of B in the regular ntor
    handshake, and the AUTH_KEYID field plays the role of the node ID.
