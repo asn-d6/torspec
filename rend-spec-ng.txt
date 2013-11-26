@@ -779,9 +779,9 @@
    is listed in more votes.  If two lines have the same PERIOD-START
    and different VALUEs, ties are broken in favor of the lower VALUE.
 
-   {TODO: Need to define a more robust algorithm. Need to cover cases
+   [TODO: Need to define a more robust algorithm. Need to cover cases
    where multiple cluster of authorities publish a different value,
-   etc.}
+   etc.]
 
    The hs-dir-shared-random lines appear, sorted by PERIOD-START, in
    the consensus immediately after the "params" line.
