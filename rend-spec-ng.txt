@@ -816,10 +816,10 @@
 
           [Exactly once per introduction point]
 
-          Base-64 encoded service key that was used to establish
-          introduction point circuit, cross-certifying the blinded
-          public key key using the certification format of proposal
-          220.
+          Base-64 encoded introduction point authentication key that
+          was used to establish introduction point circuit,
+          cross-certifying the blinded public key key using the
+          certification format of proposal 220.
 
         "enc-key" SP "ntor" SP key NL
 
@@ -874,7 +874,7 @@
      SIG              [SIGLEN bytes]
 
    The SERVICE_KEY_TYPE field indicates the type of the introduction
-   point service key and the type of the MAC to use in for
+   point authentication key and the type of the MAC to use in for
    HANDSHAKE_AUTH. Recognized types are:
        [00, 01] -- Reserved for legacy introduction cells; see
                    [LEGACY_EST_INTRO below]
@@ -1112,8 +1112,8 @@
      ZERO             [1 byte]
      ENCRYPTED        [Up to end of relay payload]
 
-   Here, AUTH_KEYID_HASH is the hash of the service key used to
-   establish the introduction.
+   Here, AUTH_KEYID_HASH is the hash of the introduction point
+   authentication key used to establish the introduction.
 
    Because of limitations in older versions of Tor, the relay payload
    size for these INTRODUCE1 cells must always be at least 246 bytes,
