@@ -863,7 +863,6 @@
      SERVICE_KEY_TYPE [1 byte]
      SERVICE_KEY_LEN  [1 byte]
      SERVICE_KEY      [SERVICE_KEY_LEN bytes]
-     FLAGS            [4 bytes]
      Any number of times:
         EXT_FIELD_TYPE [1 byte]
         EXT_FIELD_LEN  [1 byte]
@@ -886,11 +885,6 @@
    The SERVER_KEY_LEN field determines the length of the SERVICE_KEY
    field.  The SERVICE_KEY field contains the public introduction
    point authentication key.
-
-   The FLAGS field contains the following (big-endian) flags.
-   Unrecognized flags MUST be ignored.
-
-      [TODO: Define some flags or remove this field.]
 
    The EXT_FIELD_TYPE, EXT_FIELD_LEN, EXT_FIELD entries are reserved
    for future extensions to the introduction protocol. Extensions
