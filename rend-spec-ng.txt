@@ -4,12 +4,7 @@
     Split appendix B into its own thing.
 
     Reflow.
-
-    Apply tor-design vocab filter.
 ]
-
-
-
 
 
                  Next-Generation Hidden Services in Tor
@@ -1469,7 +1464,7 @@
 
    How can hidden service addresses become memorable while retaining
    their self-authenticating and decentralized nature? See
-   [HUMANE-HSADDRESSES-REFS] for some proposals.
+   [HUMANE-HSADDRESSES-REFS] for some proposals; many more are possible.
 
    Hidden Services are pretty slow. Both because of the lengthy setup
    procedure and because the final circuit has 6 hops. How can we make
