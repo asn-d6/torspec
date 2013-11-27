@@ -6,6 +6,12 @@
     Reflow.
 
     Apply tor-design vocab filter.
+
+    weasel: Would it make sense to provide a set of tables, at the very end
+      that, for each registry maps numbers to their meaning?  key types: 01
+      tap, 02 ntop.  auth methods: 01 pw, 02 ecfu.  In a style similar to IANA
+      considerations in RFCS.  Right now this information is spread all over
+      the document.
 ]
 
 
@@ -761,6 +767,7 @@ at least three parties.  Maybe rephrase.]
    before the overlap interval begins, the shared random value for
    the next period.
 
+[weasel: XXX]
 2.4. Hidden service descriptors: outer wrapper [DESC-OUTER]
 
    The format for a hidden service descriptor is as follows, using
@@ -823,6 +830,7 @@ at least three parties.  Maybe rephrase.]
 
        secret_input = nonce | blinded_public_key | subcredential |
              INT_4(version_counter)
+[weasel: what is version_counter?]
 
        keys = KDF(secret_input, salt, "hsdir-encrypted-data",
                   S_KEY_LEN + S_IV_LEN + MAC_KEY_LEN)
@@ -837,9 +845,14 @@ at least three parties.  Maybe rephrase.]
        ENCRYPTED  The plaintext encrypted with S  [variable]
        MAC        MAC of both above fields        [32 bytes]
 
+[weasel: Do we need to say S(SECRET_IV,SECRET_KEY)?
+  For me it wasn't quite clear what S was, because the definition was a long
+  time ago.]
+
    Before encryption, the plaintext must be padded to a multiple of
    1 KB with NUL bytes.  The plaintext must not be longer than ??? KB.
    [TODO: how much? Should this be a parameter?]
+[weasel: 1000 bytes or 2^10 bytes?]
 
    The plaintext format is:
 
@@ -850,6 +863,8 @@ at least three parties.  Maybe rephrase.]
       A space-separated list of integers denoting CREATE2 cell
       format numbers that the server recognizes.  Must include at
       least TAP and ntor.
+[weasel: needs a pointer where one can learn about integers such as TAP or
+  ntor.]
 
      "authentication-required" SP types NL
 
@@ -1562,6 +1577,7 @@ Appendix A. Signature scheme with key blinding [KEYBLIND]
   Generating a signature of M: given a deterministic random-looking r
   (see EdDSA paper), take R=rB, S=r+hash(R,A',M)ah mod l. Send signature
   (R,S) and public key A'.
+[weasel: this S conflicts with the use of S() as a stream cipher. Maybe rename.]
 
   Verifying the signature: Check whether SB = R+hash(R,A',M)A'.
 
