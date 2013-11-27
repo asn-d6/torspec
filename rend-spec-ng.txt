@@ -536,7 +536,6 @@
       request to a particular circuit.
 
 
-[weasel: XXX]
 2. Generating and publishing hidden service descriptors [HSDIR]
 
    Hidden service descriptors follow the same metaformat as other
@@ -650,7 +649,7 @@
    beginning of the period.
 
    Hidden service directories should accept descriptors at least
-   [TODO: how much?] minutes before they would become value, and
+   [TODO: how much?] minutes before they would become valid, and
    retain them for at least [TODO: how much?] minutes after the end
    of the period.
 
@@ -714,11 +713,13 @@
 2.2.4. URLs for anonymous uploading and downloading
 
    Hidden service descriptors conforming to this specification are
-   uploaded with an HTTP POST request the URL
+   uploaded with an HTTP POST request to the URL
    /tor/rendezvous3/publish relative to the hidden service
    directory's root, and downloaded with an HTTP GET request for the
    URL /tor/rendezvous3/<z> where z is a base-64 encoding of the
    rendezvous point's blinded public key.
+[weasel: do we use base64 anywhere else in URLs?  This will mean we
+         have slashes in "filenames".  Not nice.]
 
    These requests must be made anonymously, on circuits not used for
    anything else.
@@ -745,6 +746,8 @@
    three votes, and if no differing line with the same PERIOD-START
    is listed in more votes.  If two lines have the same PERIOD-START
    and different VALUEs, ties are broken in favor of the lower VALUE.
+[weasel: iow, we list the most common value, as long as it's been voted for by
+at least three parties.  Maybe rephrase.]
 
    [TODO: Need to define a more robust algorithm. Need to cover cases
    where multiple cluster of authorities publish a different value,
