@@ -968,6 +968,9 @@
                circuits; see MAINT_INTRO below.
                [TODO: Should this just be a new relay cell type?]
 
+               [ Possibly. This is overloading creation with
+                 maintenance, which may be confusing. -MF ]
+
    The AUTH_KEY_LEN field determines the length of the AUTH_KEY
    field.  The AUTH_KEY field contains the public introduction
    point authentication key.
@@ -1002,6 +1005,7 @@
 
         * If the circuit is already a rendezvous circuit.
         * If the circuit is already an introduction circuit.
+# Scalability?
         * If the key is already in use by another circuit.
 
    Otherwise, the node must associate the key with the circuit, for
@@ -1010,6 +1014,7 @@
    [TODO: The above will work fine with, but it will do quite badly
    if we ever freak out and want to go back to RSA2048 or bigger.  Do
    we care?]
+# Hmmmmm
 
 3.1.2. Registering an introduction point on a legacy Tor node [LEGACY_EST_INTRO]
 
@@ -1061,9 +1066,17 @@
 
        [00 01] -- update encryption keys
 
+   [This can be used to fork an intro point to balance traffic over
+    multiple hidden service servers while maintaining the
+    criteria for a valid ESTABLISH_INTRO cell. -MF]
+
    Unrecognized SUBCOMMAND_TYPE values should be ignored.
 
 3.1.3.1. Updating encryption keys (subcommand 0001) [UPDATE-KEYS-SUBCMD]
+
+   [Is this sent immediately after the hidden service host receives
+    the INTRO_ESTABLISHED cell? If not then how does the intro point
+    learn them? -MF]
 
    Hidden service hosts send this subcommand to update the configured
    public encryption keys associated with this circuit. These keys
@@ -1094,6 +1107,10 @@
    maintaining an introduction point and not forcing a client to download
    a new descriptor.  I'm not sure if that's worth it.  It makes clients
    who have seen a key before distinguishable from ones who have not.]
+
+# Repeat-client over long periods of time will always be distinguishable.
+# It may be better to simply expire intro points than try to preserve
+# forward-secrecy, though
 
    Setting the encryption keys for a given circuit replaces the
    previous keys for that circuit.  Clients who attempt to connect
@@ -1407,6 +1424,8 @@
    all.  For more fine-grained conntrol, a hidden service can be
    configured with password-based or public-key-based
    authentication.
+
+    [Is stealth mode unwanted? -MF]
 
 3.4.1. Password-based authentication.
 
