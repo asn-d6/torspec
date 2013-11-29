@@ -881,6 +881,8 @@
           [Exactly once per introduction point at start of
             introduction point section]
 
+          [blog? block maybe? -MF]
+
           The link-specifiers is a base64 encoding of a link specifier
           blog in the format described in BUILDING-BLOCKS.
 
