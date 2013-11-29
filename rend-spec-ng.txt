@@ -374,7 +374,7 @@
    through the process above.
 
    In order to download a descriptor, clients must know which blinded
-   signing key used to sign it. (See the next section for more info on
+   signing key was used to sign it. (See the next section for more info on
    key blinding.)  This blinded signing key is derived from the
    service's public key and, optionally, an additional secret that is
    not part of the hidden service's onion address.  The public key and
@@ -393,7 +393,7 @@
    may decide to respond or not respond to the client's request
    depending on the contents of the request.  The protocol is extensible
    at this point: at a minimum, the server requires that the client
-   demonstrate knowledge the contents of the encrypted portion of the
+   demonstrate knowledge od the contents of the encrypted portion of the
    hidden service descriptor. The service may additionally require a
    user- or group-specific access token before it responds to requests.
 
@@ -516,7 +516,8 @@
         an introduction point, so that clients who know the public component
         of this key can get their introduction requests sent to the right
         service.  No keypair is ever used with more than one
-        introduction point.
+        introduction point. (previously called a "service key" in
+        rend-spec.txt)
 
       Introduction point encryption key -- A short-term encryption keypair
         used when establishing connections via an introduction point. Plays a
@@ -649,7 +650,7 @@
    a fraction of the overlap interval.
 
    For example, if the period is 1500 minutes long, and overlap
-   interval is 300 minutes long, and OFFSET for begins with [90 50],
+   interval is 300 minutes long, and OFFSET begins with [90 50],
    then the next key becomes valid at 1200 + 300 * (0x9050 / 65536)
    minutes, or approximately 22 hours and 49 minutes after the
    beginning of the period.
@@ -723,7 +724,7 @@
    /tor/rendezvous3/publish relative to the hidden service
    directory's root, and downloaded with an HTTP GET request for the
    URL /tor/rendezvous3/<z> where z is a base-64 encoding of the
-   rendezvous point's blinded public key.
+   hidden service's blinded public key.
 
    [TODO: raw base64 is not super-nice for URLs, since it can have
    slashes.  We already use it for microdescriptor URLs, though. Do
@@ -896,7 +897,7 @@
 
           [At most once per introduction point]
 
-          Base64-encoded curve25519 key used to be used to encrypt
+          Base64-encoded curve25519 key used to encrypt
           request to hidden service.
 
           [TODO: I'd like to have a cross-certification here too.]
@@ -1035,7 +1036,7 @@
    all earlier fields.
 
    Note that since the relay payload itself may be no more than 498
-   bytes long, the KEY_LENGTH field can never had a first byte other
+   bytes long, the KEY_LENGTH field can never have a first byte other
    than [00] or [01].  These values are used to distinguish legacy
    ESTABLISH_INTRO cells from newer ones.
 
@@ -1047,7 +1048,7 @@
 
 3.1.3. Managing introduction circuits [MAINT_INTRO]
 
-   If the first byte of an ESTABLISH_INTRO cell is [ff], the cell's
+   If the first byte of an ESTABLISH_INTRO cell is [FF], the cell's
    body contains an administrative command for the circuit.  The
    format of such a command is:
 
@@ -1082,7 +1083,7 @@
    given introduction point authentication key.
 
    The SIGNATURE must be generated with the introduction point
-   authentication key, and must cover all the entire subcommand body,
+   authentication key, and must cover the entire subcommand body,
    prefixed with the string "Tor hidden service introduction
    encryption keys v1".
 
@@ -1173,6 +1174,9 @@
      [00 02] -- Failure: key ID not recognized
      [00 03] -- Bad message format
 
+   Recognized extension field types:
+     [00 01] -- signed set of encryption keys
+
    The extension field type 0001 is a signed set of encryption keys;
    its body matches the body of the key update command in
    [UPDATE-KEYS-CMD].  Whenever sending status [00 02], the
@@ -1214,7 +1218,7 @@
    If the cell is not a replay, it decrypts the ENCRYPTED field,
    establishes a shared key with the client, and authenticates the whole
    contents of the cell as having been unmodified since they left the
-   client. There may be multiple ways of decryption the ENCRYTPED field,
+   client. There may be multiple ways of decrypting the ENCRYTPED field,
    depending on the chosen type of the encryption key.  Requirements for
    an introduction handshake protocol are described in
    [INTRO-HANDSHAKE-REQS]. We specify one below in section
@@ -1247,7 +1251,7 @@
 
    The hidden service SHOULD NOT reject any LSTYPE fields which it
    doesn't recognize; instead, it should use them verbatim in its
-   EXTEND request to the extend to the rendezvous point.
+   EXTEND request to the rendezvous point.
 
    The ONION_KEY_TYPE field is one of:
 
@@ -1451,16 +1455,16 @@
 4. The rendezvous protocol
 
    Before connecting to a hidden service, the client first builds a
-   circuit to an arbitrarily chosen Tor node, and sends an
-   ESTABLISH_RENDEZVOUS cell.  The server later connects to the same
-   server and sends a RENDEZVOUS cell.  Once this has occurred, the
-   relay forwards the contents of the RENDEZVOUS cell to the client, and
-   joins the two circuits together.
+   circuit to an arbitrarily chosen Tor node (known as the rendezvous
+   point), and sends an ESTABLISH_RENDEZVOUS cell.  The hidden service
+   later connects to the same node and sends a RENDEZVOUS cell.  Once
+   this has occurred, the relay forwards the contents of the
+   RENDEZVOUS cell to the client, and joins the two circuits together.
 
 4.1. Establishing a rendezvous point [EST_REND_POINT]
 
-   Alice sends the rendezvous point an ESTABLISH_RENDEZVOUS containing a
-   20-byte value.
+   The client sends the rendezvous point a RELAY_COMMAND_ESTABLISH_RENDEZVOUS
+   cell containing a 20-byte value.
             RENDEZVOUS_COOKIE         [20 bytes]
 
    Rendezvous points MUST ignore any extra bytes in an
@@ -1472,10 +1476,10 @@
    use on an existing circuit, the rendezvous point should reject it and
    destroy the circuit.
 
-   Upon receiving a RELAY_COMMAND_ESTABLISH_RENDEZVOUS cell, the
-   rendezvous point the cookie with the circuit on which it was sent. It
-   replies to Alice with an empty RELAY_COMMAND_RENDEZVOUS_ESTABLISHED
-   cell to indicate success.     [TODO: make this extensible]
+   Upon receiving a ESTABLISH_RENDEZVOUS cell, the rendezvous point
+   associates the cookie with the circuit on which it was sent. It
+   replies to the client with an empty RENDEZVOUS_ESTABLISHED cell to
+   indicate success.    [TODO: make this extensible]
 
    The client MUST NOT use the circuit which sent the cell for any
    purpose other than rendezvous with the given location-hidden service.
