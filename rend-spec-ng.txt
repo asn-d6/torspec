@@ -12,6 +12,9 @@
       tap, 02 ntop.  auth methods: 01 pw, 02 ecfu.  In a style similar to IANA
       considerations in RFCS.  Right now this information is spread all over
       the document.
+    compromise: I should label the tables, and add an appendix at the end
+      listing them.
+
 ]
 
 
@@ -100,8 +103,8 @@
 
    This specification uses the following cryptographic building blocks:
 
-      * A stream cipher S(iv, k) where iv is a nonce of length S_IV_LEN
-        bytes and k is a key of length S_KEY_LEN bytes.
+      * A stream cipher STREAM(iv, k) where iv is a nonce of length
+        S_IV_LEN bytes and k is a key of length S_KEY_LEN bytes.
 
       * A public key signature system SIGN_KEYGEN()->seckey, pubkey;
         SIGN_SIGN(seckey,msg)->sig; and SIGN_CHECK(pubkey, sig, msg) -> { "OK",
@@ -723,6 +726,7 @@
    rendezvous point's blinded public key.
 [weasel: do we use base64 anywhere else in URLs?  This will mean we
          have slashes in "filenames".  Not nice.]
+[yes.  We use it in microdescriptors.]
 
    These requests must be made anonymously, on circuits not used for
    anything else.
@@ -744,13 +748,13 @@
        PERIOD-START = YYYY-MM-DD HH:MM:SS
        VALUE = A base-64 encoded 256-bit value.
 
-   For each hsdir-shared-random line listed in any vote, that line
-   is included in the consensus if it is listed verbatim in at least
-   three votes, and if no differing line with the same PERIOD-START
-   is listed in more votes.  If two lines have the same PERIOD-START
-   and different VALUEs, ties are broken in favor of the lower VALUE.
-[weasel: iow, we list the most common value, as long as it's been voted for by
-at least three parties.  Maybe rephrase.]
+   To decide which hsdir-shared-random line to include in a
+   consensus for a given PERIOD-START, we choose whichever line
+   appears verbatim in the most votes, so long as it is listed by at
+   least three authorities.  Ties are broken in favor of the lower
+   value.  More than one PERIOD-START is allowed per vote, and per
+   consensus.  The same PERIOD-START must not appear twice in a vote
+   or in a consensus.
 
    [TODO: Need to define a more robust algorithm. Need to cover cases
    where multiple cluster of authorities publish a different value,
@@ -765,6 +769,7 @@ at least three parties.  Maybe rephrase.]
    the next period.
 
 [weasel: XXX]
+[nickm: "XXX" ?]
 2.4. Hidden service descriptors: outer wrapper [DESC-OUTER]
 
    The format for a hidden service descriptor is as follows, using
@@ -793,7 +798,7 @@ at least three parties.  Maybe rephrase.]
        The revision number of the descriptor. If an HSDir receives a
        second descriptor for a key that it already has a descriptor
        for, it should retain and serve the descriptor with the
-       higher version-counter.
+       higher revision-counter.
 
        (Checking for monotonically increasing revision-counter
        values prevents an attacker from replacing a newer descriptor
@@ -826,9 +831,7 @@ at least three parties.  Maybe rephrase.]
        salt = 16 random bytes
 
        secret_input = nonce | blinded_public_key | subcredential |
-             INT_4(version_counter)
-[weasel: what is version_counter?]
-
+             INT_4(revision_counter)
        keys = KDF(secret_input, salt, "hsdir-encrypted-data",
                   S_KEY_LEN + S_IV_LEN + MAC_KEY_LEN)
 
@@ -842,14 +845,12 @@ at least three parties.  Maybe rephrase.]
        ENCRYPTED  The plaintext encrypted with S  [variable]
        MAC        MAC of both above fields        [32 bytes]
 
-[weasel: Do we need to say S(SECRET_IV,SECRET_KEY)?
-  For me it wasn't quite clear what S was, because the definition was a long
-  time ago.]
+   The encryption format is ENCRYPTED =
+               STREAM(SECRET_IV,SECRET_KEY) xor Plaintext
 
    Before encryption, the plaintext must be padded to a multiple of
-   1 KB with NUL bytes.  The plaintext must not be longer than ??? KB.
+   1 KB with NUL bytes.  The plaintext must not be longer than ??? bytes.
    [TODO: how much? Should this be a parameter?]
-[weasel: 1000 bytes or 2^10 bytes?]
 
    The plaintext format is:
 
@@ -859,9 +860,8 @@ at least three parties.  Maybe rephrase.]
 
       A space-separated list of integers denoting CREATE2 cell
       format numbers that the server recognizes.  Must include at
-      least TAP and ntor.
-[weasel: needs a pointer where one can learn about integers such as TAP or
-  ntor.]
+      least TAP and ntor as described in tor-spec.txt. See tor-spec
+      section 5.1 for a list of recognized handshake types.
 
      "authentication-required" SP types NL
 
@@ -1574,7 +1574,6 @@ Appendix A. Signature scheme with key blinding [KEYBLIND]
   Generating a signature of M: given a deterministic random-looking r
   (see EdDSA paper), take R=rB, S=r+hash(R,A',M)ah mod l. Send signature
   (R,S) and public key A'.
-[weasel: this S conflicts with the use of S() as a stream cipher. Maybe rename.]
 
   Verifying the signature: Check whether SB = R+hash(R,A',M)A'.
 
