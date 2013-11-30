@@ -724,9 +724,10 @@
    directory's root, and downloaded with an HTTP GET request for the
    URL /tor/rendezvous3/<z> where z is a base-64 encoding of the
    rendezvous point's blinded public key.
-[weasel: do we use base64 anywhere else in URLs?  This will mean we
-         have slashes in "filenames".  Not nice.]
-[yes.  We use it in microdescriptors.]
+
+   [TODO: raw base64 is not super-nice for URLs, since it can have
+   slashes.  We already use it for microdescriptor URLs, though. Do
+   we care here?]
 
    These requests must be made anonymously, on circuits not used for
    anything else.
@@ -768,8 +769,8 @@
    before the overlap interval begins, the shared random value for
    the next period.
 
-[weasel: XXX]
-[nickm: "XXX" ?]
+[TODO: find out what weasel doesn't like here.]
+
 2.4. Hidden service descriptors: outer wrapper [DESC-OUTER]
 
    The format for a hidden service descriptor is as follows, using
@@ -893,14 +894,27 @@
 
         "enc-key" SP "ntor" SP key NL
 
-          [Exactly once per introduction point]
+          [At most once per introduction point]
 
           Base64-encoded curve25519 key used to be used to encrypt
           request to hidden service.
 
           [TODO: I'd like to have a cross-certification here too.]
 
-   [XXX specify how to make this work with legacy introduction points.]
+        "enc-key" SP "legacy" NL key NL
+
+          [At most once per introduction point]
+
+          Base64-encoded RSA key, wrapped in "----BEGIN RSA PUBLIC
+          KEY-----" armor, for use with a legacy introduction point
+          as described in [LEGACY_EST_INTRO] and [LEGACY-INTRODUCE1]
+          below.
+
+          Exactly one of the "enc-key ntor" and "enc-key legacy"
+          elements must be present for each introduction point.
+
+
+        [TODO: I'd like to have a cross-certification here too.]
 
    Other encryption and authentication key formats are allowed;
    clients should ignore ones they do not recognize.
@@ -1521,7 +1535,13 @@ References:
         Deanonymization" by Alex Biryukov, Ivan Pustogarov,
         Ralf-Philipp Weinmann
 
-        "Locating Hidden Servers" by Lasse Øverlier and Paul Syverson
+        "Locating Hidden Servers" by Lasse Øverlier and Paul
+        Syverson
+
+[ED25519-REFS]:
+        "High-speed high-security signatures" by Daniel
+        J. Bernstein, Niels Duif, Tanja Lange, Peter Schwabe, and
+        Bo-Yin Yang. http://cr.yp.to/papers.html#ed25519
 
 
 Appendix A. Signature scheme with key blinding [KEYBLIND]
@@ -1557,9 +1577,10 @@ Appendix A. Signature scheme with key blinding [KEYBLIND]
   We propose the following scheme for key blinding, based on
   Ed25519.
 
-  (This is an ECC group, so remember that scalar multiplication is the
-  trapdoor function, and it's defined in terms of iterated point
-  addition. See the Ed25519 paper [XXX cite] for a fairly clear writeup.)
+  (This is an ECC group, so remember that scalar multiplication is
+  the trapdoor function, and it's defined in terms of iterated point
+  addition. See the Ed25519 paper [Reference ED25519-REFS] for a
+  fairly clear writeup.)
 
   Let the basepoint be written as B. Assume B has prime order l, so
   lB=0.  Let a master keypair be written as (a,A), where a is the
@@ -1694,7 +1715,9 @@ Appendix B. Producing a daily shared random value [SHAREDRANDOM]
       did-not-reveal ID ...
       signature (made with commitment key; see proposal 220)
 
-  (XXXX describe how to start over)
+  [XXXX describe how to start over]
+
+  [XXXX Actually, probably revise this _not_ to have a start-over step.]
 
   See [SHAREDRANDOM-REFS] for more discussion here.
 
