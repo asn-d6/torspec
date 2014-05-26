@@ -198,6 +198,15 @@ Managed proxy interface
        recognize.
       Example: TOR_PT_CLIENT_TRANSPORTS=trebuchet,battering_ram,ballista
 
+      "TOR_PT_PROXY" -- This is the address of an outgoing proxy that
+       the pluggable transport proxy should use (see proposal 232 for
+       more details). It is in the format:
+           <proxy_type>://[<user_name>][:<password>][@]<ip>:<port>
+       The TOR_PT_PROXY is optional and can be omitted if there is no
+       need to connect to an outgoing proxy.
+      Example: socks5://tor:test1234@198.51.100.1:8000
+               socks4a://198.51.100.2:8001
+
       {Server only}
 
       "TOR_PT_EXTENDED_SERVER_PORT" -- An <address>:<port> where tor
@@ -279,10 +288,17 @@ Managed proxy interface
      VERSION-ERROR no-version
   and exit.
 
-  The proxy should then open its ports.  If running as a client
-  proxy, it should not use fixed ports; instead it should autoselect
-  ports to avoid conflicts.  A client proxy should by default only
-  listen on localhost for connections.
+  If the pluggable transport proxy detects that the TOR_PT_PROXY
+  environment variable is set, it attempts connecting to it. On
+  success it writes to stdout:
+     PROXY DONE
+  On failure it writes:
+     PROXY-ERROR <errormessage>
+
+  Now it's time for the pluggable transport proxy to open its ports.
+  If running as a client proxy, it should not use fixed ports; instead
+  it should autoselect ports to avoid conflicts.  A client proxy
+  should by default only listen on localhost for connections.
 
   A server proxy SHOULD try to listen at a consistent port, though it
   SHOULD pick a different one if the port it last used is now allocated.
