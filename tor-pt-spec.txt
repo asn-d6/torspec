@@ -25,7 +25,18 @@ A Table of Contents:
   2.2.1.1. Server PT behavior (SMETHOD lines)
   2.2.2. Managed proxy protocol behavior
 
-XXX TODO: ASCII diagram
+                                                             +---- Extended ORPort
+                                                             |        connection
+                                                             v
+                  +-----------+             +-----------+
+  SOCKS ->  +-----| PT client |------------| PT server  |-----+
+connection  |     +-----------+    ^        +-----------+     |
+            |                      |                          |
+      +------------+            Obfuscated             +--------------+
+      | Tor Client |             traffic               |  Tor Bridge  |
+      +------------+                                   +--------------+
+
+
 
 0. Motivation
 
