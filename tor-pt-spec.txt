@@ -285,6 +285,15 @@ connection  |     +-----------+    ^        +-----------+     |
        names that it doesn't recognize.
       Example: TOR_PT_CLIENT_TRANSPORTS=trebuchet,battering_ram,ballista
 
+      "TOR_PT_PROXY" -- This is the address of an outgoing proxy that
+       the pluggable transport proxy should use (see proposal 232 for
+       more details). It is in the format:
+           <proxy_type>://[<user_name>][:<password>][@]<ip>:<port>
+       The TOR_PT_PROXY is optional and can be omitted if there is no
+       need to connect to an outgoing proxy.
+      Example: socks5://tor:test1234@198.51.100.1:8000
+               socks4a://198.51.100.2:8001
+
     {Server only}
 
       "TOR_PT_EXTENDED_SERVER_PORT" -- An <address>:<port> where tor
@@ -375,10 +384,31 @@ connection  |     +-----------+    ^        +-----------+     |
   and how.  It does this by printing zero or more CMETHOD or SMETHOD
   lines to its stdout.
 
-2.2.1.0. Client PT behavior (CMETHOD lines)
+2.2.1.0. Client PT behavior
 
-  Client PT proxies report their transports with CMETHOD lines that
-  look like this:
+2.2.1.0.0. Client PT outgoing proxy (PROXY lines)
+
+  If the client PT finds out that the TOR_PT_PROXY environment
+  variable is set, the PT is expected to use that as an outgoing
+  proxy.
+
+  If the value of the TOR_PT_PROXY environment variable is a proxy URL
+  usable by the pluggable transport plugin (as specified by proposal
+  232-pluggable-transports-through-proxy.txt), the plugin writes to
+  stdout:
+     PROXY DONE
+  On failure it writes:
+     PROXY-ERROR <errormessage>
+
+2.2.1.0.1. Client PT configuration (CMETHOD lines)
+
+  Now it's time for the pluggable transport proxy to open its ports.
+  A client PT should not use fixed ports; instead it should autoselect
+  ports to avoid conflicts.  A client proxy should by default only
+  listen on localhost for connections.
+
+  Client PTs report their transports with CMETHOD lines that look like
+  this:
    CMETHOD <transport> socks4/socks5 <address:port>
   as in
    CMETHOD trebuchet socks5 127.0.0.1:19999
@@ -442,3 +472,18 @@ connection  |     +-----------+    ^        +-----------+     |
   should set the environment variable:
     TOR_PT_MANAGED_TRANSPORT_VER=1
 
+2.3. Extended ORPort [EXTORPORT]
+
+  Server-side PTs SHOULD pass additional information about their
+  clients to Tor for statistics gathering. This is done using the
+  Extended ORPort protocol, which is a variant of the ORPort with an
+  extra metadata channel.
+
+  As an example, PTs are expected to use the Extended ORPort metadata
+  channel to inform Tor about the PT used in each connection, so that
+  Tor can keep track on the number of connections per PT.
+
+  The Extended ORPort protocol is specified in proposal
+  196-transport-control-ports.txt.
+
+TODO: Managed proxy protocol test vectors
