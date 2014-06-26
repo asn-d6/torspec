@@ -176,9 +176,15 @@ connection  |     +-----------+    ^        +-----------+     |
   Server-side PTs are configured similarly to client proxies. Bridge
   operators use ServerTransportPlugin lines to configure their PTs.
 
-  XXX Word about ServerTransportOptions
+  If a server-side PT requires additional parameters, they need to be
+  specified using the ServerTransportOptions torrc parameter.
 
-  XXX word about ExtORport
+  Also, instead of using the ORPort, server PTs SHOULD use the
+  Extended ORPort to pass data to Tor. The Extended ORPort protocol is
+  an ORPort enchanced with an additional metadata channel to carry
+  various metadata about client connections (which PT was used, what
+  was the actual IP of the client, etc.). The Extended ORPort is
+  specified in [EXTORPORT].
 
 2.1.1.0. ServerTransportPlugin lines
 
