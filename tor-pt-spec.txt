@@ -388,9 +388,11 @@ connection  |     +-----------+    ^        +-----------+     |
 
 2.2.1.0.0. Client PT outgoing proxy (PROXY lines)
 
-  If the client PT finds out that the TOR_PT_PROXY environment
-  variable is set, the PT is expected to use that as an outgoing
-  proxy.
+  If the client PT is provided with a TOR_PT_PROXY environment
+  variable, it MUST make all outgoing network connections via the
+  supplied proxy.  If it is unable to do so for any reason (eg:
+  malformed value, unsupported proxy type, unreachable proxy
+  address), it MUST return a `PROXY_ERROR` and terminate.
 
   If the value of the TOR_PT_PROXY environment variable is a proxy URL
   usable by the pluggable transport plugin (as specified by proposal
