@@ -1,0 +1,155 @@
+Title: On Computing Shared Randomness During the Tor Voting Process
+
+0. Motivation
+
+   For the next generation hidden services project, we need the Tor network to
+   produce a fresh random value every day in such a way that it cannot be
+   predicted in advance or influenced by an attacker.
+
+   Currently, the main use case for this random value is to make the hash ring
+   of HSDirs unpredictable (#8244), which should resolve a wide class of hidden
+   service DoS attacks and should make it harder for people to gauge the
+   popularity and activity of hidden services. Furthermore, this random value
+   can also be used by other Tor-related protocols like OnioNS to introduce
+   unpredictability to the protocol.
+
+   Proposal 225 specifies a commit-and-reveal protocol that can be run as an
+   external script and have the results be fed to the directory authorities.
+   However, directory authority operators feel unsafe running a third-party
+   script that opens TCP ports and accepts connections from the Internet.
+   Hence, this proposal aims to embed the commit-and-reveal idea in the Tor
+   voting process which should makes it smoother to deploy and maintain.
+
+1. Overview
+
+   This proposal specifies some modifications to the Tor voting process that
+   allows a commit and reveal protocol to be performed without extra round
+   trips.
+
+   It also specifies how often the global randomness should be computed, and
+   how it should be used by clients.
+
+2. Specification
+
+2.1. Design Overview
+
+   The commit-and-reveal process aims to produce a fresh global random value
+   everyday at 12h00 UTC (noon). The protocol works in three stages:
+
+   - During the voting phase at 12h00 UTC, all authorities include a commitment
+     in their votes. The commitments are then included in the resulting
+     consensus.
+
+   - At the next voting phase 24 hours later at 12h00 UTC, all authorities
+     reveal their previous commitments and also commit to additional fresh
+     values in their votes.
+
+   - The revealed values and commitments are then included in the resulting
+     consensus along with the current, if any, revealed values. The revealed
+     values are then used by Tor clients to compute the shared random.
+
+2.2. Commit & Reveal in Voting
+
+   An authority that wants to commit to a value during a vote, adds the
+   following line to its vote document at 12h00 UTC.
+
+     global-rand-commitment sha256 C
+
+   where the commitment value C is a base64-encoded SHA-256 hash of a 256-bit
+   random value R.
+
+   When the authority wants to reveal a previously commited value, it adds the
+   following line to its vote at 12h00 UTC so the revealed value can be present
+   in the noon consensus.
+
+     global-rand-reveal R'
+
+   where the value R' is the actual value of a _previously_ commited value C'.
+
+   The following figure shows the bootstrapping process where the first vote
+   only contains a commitment because there are no previous value to reveal.
+   At the next period, 24 hours later at 12h00 UTC, we then reveal the previous
+   commitment (C:0 --> R:0) and commit a new value C:1.
+
+   +-----+    +-----+             +-----+     +-----+             +-----+
+   | R:- |    | R:- |             | R:0 |     | R:0 |             | R:1 |
+   | C:0 |--> | C:0 | --> ... --> | C:1 | --> | C:1 | --> ... --> | C:2 | -->
+   +-----+    +-----+             +-----+     +-----+             +-----+
+    12h00      13h00               12h00       13h00               12h00
+
+2.3. Commits & Reveals in the Consensus
+
+   When a directory authority receives a vote with a commitment and a reveal,
+   it should include them in the resulting consensus so that it always contains
+   the latest commitments and reveals. These will be used by clients to calculate
+   the shared randomness even if they don't have the noon consensus, and will
+   be used by directory authorities to match the reveals with the commitments.
+
+   Futhermore, the previous valid reveal values must also be added to the
+   consensus since both values in a 24 hours time period are used.
+
+   A commitment should be placed in the consensus using the following format:
+
+     received-commitment ID C
+
+   where ID is the identity fingerprint of the directory authority and C is a
+   base64-encoded SHA-256 hash of a 256-bit random value.
+
+   Similarly, a reveal should be placed in the consensus using the following
+   format:
+
+     received-reveal ID R
+
+   where the value R is a 256-bit random value base64-encoded.
+
+   To maintain consistent ordering, commitments should be listed before the
+   reveals. All items should be sorted in ascending order based on their
+   directory authority ID.
+
+2.2. Randomness Time Schedule
+
+   We aim to derive a single global random value computed every day at noon
+   UTC.
+
+   Specifically, every day when voting for the consensus with "valid-after"
+   12:00 UTC, authorities are expected to include new commitment and reveal
+   values in their votes.
+
+   In the voting periods between the noon and the noon of the next day,
+   authorities are expected to include their commitments and reveals in their
+   votes and consensuses. Directory authorities MUST validate that commitments
+   and reveals are carried intact from one consensus to the other.
+
+   # XXX insert ASCII art displaying time period
+
+2.3. Commitment validation
+
+   When a directory authority receives a vote with a reveal value, it MUST
+   check the current active consensus and validate that the reveal value indeed
+   matches the included commitment from that directory authority.
+
+2.4. Shared Randomness Calculation
+
+   A client that wants to derive the shared random value V, should use the
+   appropriate noon consensus and calculate V as follows:
+
+     V = SHA256(ID | R | ID | R | ID | R | ...)
+
+   where the ID values appear in ascending order and the R values appear after
+   their corresponding ID values.
+
+2.5. Bootstrapping
+
+   When this system gets first boostrapped, authorities will not have any
+   values to reveal so they will only issue commitments. Also, authorities who
+   restart between the commit and reveal phases, MAY lose their state and not
+   issue any reveal lines.
+
+   Hence, authorities should be able to handle players who commit but not
+   reveal.
+
+   # XXX Don't we lose the opportunity to detect abort attacks this # way?
+
+3. Security Analysis
+
+4. Discussion
