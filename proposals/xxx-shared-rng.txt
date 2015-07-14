@@ -60,11 +60,64 @@ Title: On Computing Shared Randomness During the Tor Voting Process
 
    When the authority wants to reveal a previously commited value, it adds the
    following line to its vote at 12h00 UTC so the revealed value can be present
-   in the noon consensus.
+   in the 12h00 consensus.
 
      global-rand-reveal R'
 
    where the value R' is the actual value of a _previously_ commited value C'.
+
+2.3. Commits & Reveals in the Consensus
+
+   When a directory authority receives a vote with a commitment and a
+   reveal, it should include them in the resulting consensus so that
+   it always contains the latest commitments and reveals. These will
+   be used by clients to calculate the shared randomness even if they
+   don't have the 12h00UTC consensus, and will be used by directory
+   authorities to match the 12h00UTC reveals with the old commitments.
+
+   A commitment should be placed in the consensus using the following format:
+
+     received-commitment TIME_PERIOD_NUM ID C
+
+   where ID is the identity fingerprint of the directory authority and
+   C is a base64-encoded SHA-256 hash of a 256-bit random
+   value. TIME_PERIOD_NUM is the time period number that the
+   commitments are relevant for (the time period number can be
+   computed as described in section TIME-PERIODS of prop224).
+
+   Similarly, a reveal should be placed in the consensus using the following
+   format:
+
+     received-reveal TIME_PERIOD_NUM ID R
+
+   where the value R is a 256-bit random value base64-encoded.
+
+   Futhermore, the reveal values from the *previous time period* must
+   also be included to the consensus since both values will be used
+   during a 24 hour time period (see TIME-OVERLAP in prop224).
+
+   To maintain consistent ordering, reveals should be listed before
+   the commits. Reveals of the previous time period should be listed
+   before the reveals of the current time period. All items should be
+   sorted in ascending order based on their directory authority ID.
+
+   You can find an example of how commitments & reveals should be
+   included in the consensus in the appendix of this proposal.
+
+2.2. Randomness Time Schedule
+
+   We aim to derive a single global random value computed every day at
+   12:00 UTC.
+
+   Specifically, every day when voting for the consensus with
+   "valid-after" 12:00 UTC, authorities are expected to include fresh
+   commitment and reveal values in their votes.
+
+   In the voting periods between the noon and the noon of the next
+   day, authorities are expected to include their latest commitments
+   and reveals in their votes and consensuses. Directory authorities
+   MUST validate that commitments and reveals are carried intact from
+   one consensus to the other.
 
    The following figure shows the bootstrapping process where the first vote
    only contains a commitment because there are no previous value to reveal.
@@ -77,56 +130,14 @@ Title: On Computing Shared Randomness During the Tor Voting Process
    +-----+    +-----+             +-----+     +-----+             +-----+
     12h00      13h00               12h00       13h00               12h00
 
-2.3. Commits & Reveals in the Consensus
-
-   When a directory authority receives a vote with a commitment and a reveal,
-   it should include them in the resulting consensus so that it always contains
-   the latest commitments and reveals. These will be used by clients to calculate
-   the shared randomness even if they don't have the noon consensus, and will
-   be used by directory authorities to match the reveals with the commitments.
-
-   Futhermore, the previous valid reveal values must also be added to the
-   consensus since both values in a 24 hours time period are used.
-
-   A commitment should be placed in the consensus using the following format:
-
-     received-commitment ID C
-
-   where ID is the identity fingerprint of the directory authority and C is a
-   base64-encoded SHA-256 hash of a 256-bit random value.
-
-   Similarly, a reveal should be placed in the consensus using the following
-   format:
-
-     received-reveal ID R
-
-   where the value R is a 256-bit random value base64-encoded.
-
-   To maintain consistent ordering, commitments should be listed before the
-   reveals. All items should be sorted in ascending order based on their
-   directory authority ID.
-
-2.2. Randomness Time Schedule
-
-   We aim to derive a single global random value computed every day at noon
-   UTC.
-
-   Specifically, every day when voting for the consensus with "valid-after"
-   12:00 UTC, authorities are expected to include new commitment and reveal
-   values in their votes.
-
-   In the voting periods between the noon and the noon of the next day,
-   authorities are expected to include their commitments and reveals in their
-   votes and consensuses. Directory authorities MUST validate that commitments
-   and reveals are carried intact from one consensus to the other.
-
-   # XXX insert ASCII art displaying time period
+    XXX also mention the old  reveals
 
 2.3. Commitment validation
 
-   When a directory authority receives a vote with a reveal value, it MUST
-   check the current active consensus and validate that the reveal value indeed
-   matches the included commitment from that directory authority.
+   When a directory authority receives a vote with a reveal value, it
+   MUST check the current active consensus and validate that the
+   reveal value indeed matches the included commitment from that
+   directory authority.
 
 2.4. Shared Randomness Calculation
 
@@ -145,11 +156,50 @@ Title: On Computing Shared Randomness During the Tor Voting Process
    restart between the commit and reveal phases, MAY lose their state and not
    issue any reveal lines.
 
-   Hence, authorities should be able to handle players who commit but not
-   reveal.
+   Hence, authorities should be able to handle players who commit but not reveal.
 
    # XXX Don't we lose the opportunity to detect abort attacks this # way?
 
 3. Security Analysis
 
+   XXX what happens if only a few dirauths vote?
+
 4. Discussion
+
+5. Appendix
+
+5.1. Example commitments/reveals in the consensus
+
+   Let's say we are about to enter time period 180. The consensus
+   needs to include three pieces of information:
+
+   - The reveal values of the previous time period (179). These should
+     be ued by clients and hidden services that need to compute the
+     previous shared random value.
+
+   - The reveal values for this time period (180) which correspond to
+     commitment values of the previous time period. These should be
+     used to calculate the shared random value for this time period.
+
+     XXX how are authorities going to get the old commitments?
+
+   - The commitment values for this time preiod (180), which will be
+     revealed in the beginning of time period 181.
+
+   After the appropriate ordering (as specified in the last paragraph
+   of the section above) they will look like this in the consensus:
+
+	   received-reveal 179 14C131DFC5C6F93646BE72FA1401C02A8DF2E8B4 87428fc522803d31065e7bce3cf03fe475096631e5e07bbd7a0fde60c4cf25c7
+	   received-reveal 179 23D15D965BC35114467363C165C4F724B64B4F66 0263829989b6fd954f72baaf2fc64bc2e2f01d692d4de72986ea808f6e99813f
+	   received-reveal 179 49015F787433103580E3B66A1707A00E60F2D15B 0433e993a3dbc505d6e5cad972a1df0ab189cfe7ceece5e94fd47ca9a074370f
+	   received-reveal 179 585769C78764D58426B8B52B6651A5A71137189A 13c1dc569ae4a0d7f90d8f83d22fc9c8fa526e133f8fea0f9526c8533c4d8da3
+
+       received-reveal 180 14C131DFC5C6F93646BE72FA1401C02A8DF2E8B4 d6ba4fb19951b0a0175af857ec4891947aaf65d7de043c48a38b2daf2df0a329
+	   received-reveal 180 23D15D965BC35114467363C165C4F724B64B4F66 6fc16b03d8c15b9885876848a301a01816cccaf7b48e74f2b51db99c007a3bd5
+	   received-reveal 180 49015F787433103580E3B66A1707A00E60F2D15B d867d3f88fa20d7cb936ecd93651adeedf473a6177218cd0987f462ff5511cb6
+	   received-reveal 180 585769C78764D58426B8B52B6651A5A71137189A 969eeff1eaac226a228cc61503effa46ea87d872ef3174365befc7c36ffa3c48
+
+       received-commitment 180 14C131DFC5C6F93646BE72FA1401C02A8DF2E8B4 d93844f8f37e55564be3f194656bf33b5d0fb5e589a0fe17eb7c2d4e8593ec9c
+	   received-commitment 180 23D15D965BC35114467363C165C4F724B64B4F66 4960a9ce196ee53a9ae6f2b038ebf5bb7949312406eabe79835e766b4a3d0d88
+	   received-commitment 180 49015F787433103580E3B66A1707A00E60F2D15B 7e332bcee418f7d700927c946d36341f0651d6d90997b58d3d5441dec96b2e74
+	   received-commitment 180 585769C78764D58426B8B52B6651A5A71137189A d2b6d0723608af24de1b526a7cb97148f191bc951fe632dea5d89f1ff3407fea
