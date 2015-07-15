@@ -75,6 +75,9 @@ Title: Computing Shared Randomness During the Tor Voting Process
    The system also has a small bootstrapping procedure that is
    described in [BOOTSTRAP].
 
+   The following sections specify how this information will be encoded
+   into votes and consensuses.
+
 2.2. Commit & Reveal During Voting [CRVOTING]
 
    An authority that wants to commit to a value during a vote, should
@@ -83,10 +86,10 @@ Title: Computing Shared Randomness During the Tor Voting Process
 
       global-rand-commitment sha256 C
 
-   where the commitment value C is a base64-encoded SHA-256 hash of a 256-bit
-   random value R.
+   where the commitment value C is a base64-encoded SHA-256 hash of a
+   256-bit random value R.
 
-   XXX should we make a more elaborate construction?
+   XXX should we make a more elaborate construction for commitments?
        like H(value | time_period_num)? why? bad rng? so?
 
    When the authority wants to reveal a previously commited value, it
@@ -126,6 +129,8 @@ Title: Computing Shared Randomness During the Tor Voting Process
    identity fingerprint.
 
 2.3. Shared Randomness Information in the Consensus
+
+  XXX specify better how the voting procedure gets into the consensus
 
 2.3.1. Shared Random Value in the Consensus
 
@@ -203,11 +208,13 @@ Title: Computing Shared Randomness During the Tor Voting Process
    are included in every consensus. This should happen after three
    12:00UTC consensuses has been produced which takes 48 hours.
 
-3. Security Analysis
+3. Security Analysis (maybe move after discussion section)
 
 3.1. Attacker can stop consensus from happening
 
    XXX
+
+3.2. Security of commit&reveal and future directions
 
 4. Discussion
 
@@ -263,6 +270,10 @@ Title: Computing Shared Randomness During the Tor Voting Process
 
    XXX More info...?
 
+4.5. Why not make a new document for this thing?
+
+   XXX
+
 5. Appendix
 
 XXX If commit-reveal fails, consensus should happen
@@ -270,7 +281,6 @@ XXX If commit-reveal fails, consensus should happen
 XXX What happens if a dirauth receives contains commitment that the other dirauth didn't?
 
 5.1. Example commitments/reveals in the consensus
-
 
    XXX update this
 
