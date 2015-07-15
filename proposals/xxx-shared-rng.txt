@@ -33,104 +33,147 @@ Title: Computing Shared Randomness During the Tor Voting Process
 
 2.1. Design Overview
 
-   The commit-and-reveal process aims to produce a fresh global random value
-   everyday at 12h00 UTC (noon). The protocol works in three stages:
+   The commit-and-reveal process aims to produce a fresh global random
+   value everyday at 12:00UTC.
 
-   - During the voting phase at 12h00 UTC, all authorities include a commitment
-     in their votes. The commitments are then included in the resulting
-     consensus.
+   Also, clients might need either the current shared random value or
+   the shared random value from the previous time period. Hence, we
+   want to have both of these values readily available in every consensus.
 
-   - At the next voting phase 24 hours later at 12h00 UTC, all authorities
-     reveal their previous commitments and also commit to additional fresh
-     values in their votes.
+   The protocol works in three stages:
 
-   - The revealed values and commitments are then included in the resulting
-     consensus along with the current, if any, revealed values. The revealed
-     values are then used by Tor clients to compute the shared random.
+   - During the voting phase at 12:00UTC every day, authorities
+     include in their votes:
 
-2.2. Commit & Reveal in Voting
+     (a) A fresh commitment value that will be revealed in the beginning
+         of the next time period.
 
-   An authority that wants to commit to a value during a vote, adds the
-   following line to its vote document at 12h00 UTC.
+     (b) A reveal value that reveals the commitments from the previous
+         time period.
 
-     global-rand-commitment sha256 C
+     (c) The shared randomness value of the previous time period.
+
+   - The resulting consensus at 12:00UTC should include:
+
+     (a) The commitments sent by dirauths during the voting session.
+
+     (b) The shared random value of the current time period.
+
+     (c) The shared random value of the previous time period.
+
+   - For the next 24 hours, until the next 12:00 UTC consensus,
+     authorities should include in their votes the shared random value
+     of this time period, and the shared random value of the previous
+     time period. These values should also be included in the
+     resulting consensuses, so that they are available to the clients.
+
+   During the first two days from the deployment of the system, the
+   system will be bootstrapping. This bootstrapping procedure is
+   specified in section [BOOTSTRAP].
+
+2.2. Commit & Reveal During Voting
+
+   An authority that wants to commit to a value during a vote, should
+   generate a random 256-bit value R, and include its commitment in
+   its 12:00 UTC vote as follows:
+
+      global-rand-commitment sha256 C
 
    where the commitment value C is a base64-encoded SHA-256 hash of a 256-bit
    random value R.
+
+   # XXX should we make a more elaborate construction?
+   # like H(value | time_period_num)? why?
 
    When the authority wants to reveal a previously commited value, it adds the
    following line to its vote at 12h00 UTC so the revealed value can be present
    in the 12h00 consensus.
 
-     global-rand-reveal R'
+      global-rand-reveal R'
 
    where the value R' is the actual value of a _previously_ commited value C'.
 
-2.3. Commits & Reveals in the Consensus
+   XXX What happens if the authority reveals a wrong value? Where do
+       the other dirauths check it?
 
-   When a directory authority receives a vote with a commitment and a
-   reveal, it should include them in the resulting consensus so that
-   it always contains the latest commitments and reveals. These will
-   be used by clients to calculate the shared randomness even if they
-   don't have the 12h00UTC consensus, and will be used by directory
-   authorities to match the 12h00UTC reveals with the old commitments.
+   An authority that wants to include a shared random value in its
+   vote would do it as follows:
+
+      global-rand-value TIME_PERIOD_NUM V
+
+   where TIME_PERIOD_NUM is the time period number that the shared
+   random value is relevant for (the time period number can be
+   computed as described in section TIME-PERIODS of prop224). V is the
+   actual shared random value that should be used by clients and
+   hidden services computed as specified in the section above.
+
+   XXX specify what "is relevant for" means above.
+
+2.4. Shared Randomness Calculation
+
+   A directory authority or client who wants to derive the final
+   shared random value V, should use the appropriate 12:00 consensus
+   and calculate V as follows:
+
+       V = SHA256(ID_a | R_a | ID_b | R_b | ID_c | R_c | ...)
+
+   where the ID_k value is the identity fingerprint of directory
+   authority k and R_k is its corresponding reveal value for that time
+   period. The inputs should be sorted in ascending order based on the
+   identity fingerprint.
+
+2.3. Shared Randomness Information in the Consensus
+
+2.3.1. Shared Random Value in the Consensus
+
+   Directory authorities should always include the two previous shared
+   random values in the consensus; that is, the shared random value
+   for the current time period and the one of the previous time
+   period. These values are included in every consensus so that
+   clients can learn the current shared random values even if they
+   don't have the 12:00UTC consensus.
+
+   In the consensus, shared random values should be included in the
+   following format:
+
+         global-rand-value TIME_PERIOD_NUM V
+
+   as specified in the previous section.
+
+   To maintain consistent ordering, the shared random values of the
+   previous time period should be listed before the values of the
+   current time period.
+
+2.3.2. Commitments in the Consensus
+
+   When computing the 12:00UTC consensus, directory authorities should
+   have included their commitments and reveals for that period in
+   their 12:00UTC votes.
+
+   To avoid attacks where a malicious authority sends different
+   commitment values to different authorities. we always use the
+   opinion of the majority on which commitments values should be
+   active.
+
+   To do that, in every 12:00UTC consensus, authorities include all
+   the commitments they received. By doing this, the resulting
+   consensus will include the majority's opinion on the received
+   commitments. Attacks where a malicious authority tries to stop the
+   12:00UTC consensus from being created entirely are discussed in the
+   security section.
+
+   XXX should we include all the commitments we receive in the consensus?
+       or the union of all commitments seen in votes from all dirauths?
 
    A commitment should be placed in the consensus using the following format:
 
-     received-commitment TIME_PERIOD_NUM ID C
+     global-rand-commitment TIME_PERIOD_NUM ID C
 
    where ID is the identity fingerprint of the directory authority and
-   C is a base64-encoded SHA-256 hash of a 256-bit random
-   value. TIME_PERIOD_NUM is the time period number that the
-   commitments are relevant for (the time period number can be
-   computed as described in section TIME-PERIODS of prop224).
+   C is the commitment of that directory authority.
 
-   Similarly, a reveal should be placed in the consensus using the following
-   format:
-
-     received-reveal TIME_PERIOD_NUM ID R
-
-   where the value R is a 256-bit random value base64-encoded.
-
-   Futhermore, the reveal values from the *previous time period* must
-   also be included to the consensus since both values will be used
-   during a 24 hour time period (see TIME-OVERLAP in prop224).
-
-   To maintain consistent ordering, reveals should be listed before
-   the commits. Reveals of the previous time period should be listed
-   before the reveals of the current time period. All items should be
-   sorted in ascending order based on their directory authority ID.
-
-   You can find an example of how commitments & reveals should be
-   included in the consensus in the appendix of this proposal.
-
-2.2. Randomness Time Schedule
-
-   We aim to derive a single global random value computed every day at
-   12:00 UTC.
-
-   Specifically, every day when voting for the consensus with
-   "valid-after" 12:00 UTC, authorities are expected to include fresh
-   commitment and reveal values in their votes.
-
-   In the voting periods between the noon and the noon of the next
-   day, authorities are expected to include their latest commitments
-   and reveals in their votes and consensuses. Directory authorities
-   MUST validate that commitments and reveals are carried intact from
-   one consensus to the other.
-
-   The following figure shows the bootstrapping process where the first vote
-   only contains a commitment because there are no previous value to reveal.
-   At the next period, 24 hours later at 12h00 UTC, we then reveal the previous
-   commitment (C:0 --> R:0) and commit a new value C:1.
-
-   +-----+    +-----+             +-----+     +-----+             +-----+
-   | R:- |    | R:- |             | R:0 |     | R:0 |             | R:1 |
-   | C:0 |--> | C:0 | --> ... --> | C:1 | --> | C:1 | --> ... --> | C:2 | -->
-   +-----+    +-----+             +-----+     +-----+             +-----+
-    12h00      13h00               12h00       13h00               12h00
-
-    XXX also mention the old  reveals
+   To maintain consistent ordering, commitment values should be sorted
+   in ascending order based on their directory authority ID.
 
 2.3. Commitment validation
 
@@ -139,26 +182,23 @@ Title: Computing Shared Randomness During the Tor Voting Process
    reveal value indeed matches the included commitment from that
    directory authority.
 
-2.4. Shared Randomness Calculation
+2.5. Bootstrapping [BOOTSTRAP]
 
-   A client that wants to derive the shared random value V, should use the
-   appropriate noon consensus and calculate V as follows:
+   When this system gets first deployed, authorities will not have any
+   values to reveal so they will only issue commitments. Also,
+   authorities who restart between the commit and reveal phases, MAY
+   lose their state and not issue any reveal lines.
 
-     V = SHA256(ID | R | ID | R | ID | R | ...)
+   For this reason, authorities MUST be able to handle votes that only
+   have commitment entries. Authorities MUST also be able to handle
+   the case where an authority has commited in the past, but does not
+   follow up with a reveal.
 
-   where the ID values appear in ascending order and the R values appear after
-   their corresponding ID values.
+   XXX Don't we lose the opportunity to detect abort attacks then?
 
-2.5. Bootstrapping
-
-   When this system gets first boostrapped, authorities will not have any
-   values to reveal so they will only issue commitments. Also, authorities who
-   restart between the commit and reveal phases, MAY lose their state and not
-   issue any reveal lines.
-
-   Hence, authorities should be able to handle players who commit but not reveal.
-
-   # XXX Don't we lose the opportunity to detect abort attacks this # way?
+   Furthermore, clients MUST NOT use the randomness from this system
+   till it has bootstrapped completely; that is, until two shared
+   random values are included in every consensus.
 
 3. Security Analysis
 
