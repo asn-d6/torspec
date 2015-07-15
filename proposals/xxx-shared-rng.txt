@@ -205,9 +205,63 @@ Title: Computing Shared Randomness During the Tor Voting Process
 
 3. Security Analysis
 
-   XXX what happens if only a few dirauths vote?
+3.1. Attacker can stop consensus from happening
+
+   XXX
 
 4. Discussion
+
+4.1 Shared random or revealed values in the consensus
+
+   The current approach is to publish only the shared random value SR in the
+   consensus. However, we could also publish the revealed values instead and
+   let the clients compute SR. We choose to not take this approach because of
+   the following. Assuming that a client sees the consensus as trustable
+   entity, it means that if the revealed values are voted correctly the
+   resulting SR is trustable. Thus, publishing only the SR in the consensus
+   adds two extra lines in the consensus (current and previous SR) instead of
+   N*2 lines of revealed values where N is the amount of directory authorities.
+
+4.2 Commitment in every consensus or just the 12h00UTC
+
+   Section 3.x outline the importance of publishing the commitments in the
+   consensus. Although, we only publish them at the 12h00UTC consensus and not
+   at each new consensus. The side effects of this is that the directory
+   authorities need to keep the previous commitments in memory so when the
+   reveal happens, it can be verified.
+
+   The side effect of not having the 12h00UTC commitments in each new consensus
+   is that if a directory authority restarts it won't be able to recover those
+   commitments unless it fetches the 12h00UTC consensus. However, we think that
+   this is actually not a real problem because the authority won't be able to
+   reveal the previous commitments thus even though it can recover the
+   commitments, it can not do anything with them that is useful.
+
+   So, the commitments are only available in the 12h00UTC consensus for
+   security reasons and not in the others. This also allow us to save some
+   space in the consensus document and simplify the consensus creation logic.
+
+4.3 Saved revealed value on disk
+
+   This proposal doesn't mandate a directory authority to save its revealed
+   value on disk. The potential of saving it on disk would allow a possible
+   recovery that is the authority could read the saved value and use it at the
+   next 12h00UTC voting.
+
+4.4 Why the added complexity from proposal 225
+
+   The complexity difference between this proposal and prop#225 is in part
+   caused by the next generation hidden service detailed in prop#224 and the
+   fact that prop#225 doesn't specify anything on how the client can get the
+   shared random value.
+
+   It is important that at any consensus, the previous and current shared
+   random value be available for clients and hidden services that are just
+   starting up else it's impossible to compute the accurate directory location.
+   It also avoid the need for a client to have to fetch the 12h00UTC consensus
+   only for the shared random value.
+
+   XXX More info...?
 
 5. Appendix
 
