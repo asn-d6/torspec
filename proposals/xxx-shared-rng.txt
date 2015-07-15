@@ -36,30 +36,35 @@ Title: Computing Shared Randomness During the Tor Voting Process
    The commit-and-reveal process aims to produce a fresh global random
    value everyday at 12:00UTC.
 
-   Also, clients might need either the current shared random value or
-   the shared random value from the previous time period. Hence, we
-   want to have both of these values readily available in every consensus.
+   Also, according to prop224, clients might need either the current
+   shared random value or the shared random value from the previous
+   time period. Hence, we want to have both of these values readily
+   available in every consensus.
 
-   The protocol works in three stages:
+   The protocol works as follows:
 
    - During the voting phase at 12:00UTC every day, authorities
      include in their votes:
 
-     (a) A fresh commitment value that will be revealed in the beginning
-         of the next time period.
+        (a) A fresh commitment value that will be revealed in the beginning
+            of the next time period.
 
-     (b) A reveal value that reveals the commitments from the previous
-         time period.
+        (b) A reveal value that corresponds to the commitments of the
+            previous time period.
 
-     (c) The shared randomness value of the previous time period.
+        (c) The shared randomness value of the previous time period.
 
    - The resulting consensus at 12:00UTC should include:
 
-     (a) The commitments sent by dirauths during the voting session.
+        (a) The commitments sent by dirauths during the voting session.
 
-     (b) The shared random value of the current time period.
+        (b) The shared random value of the current time period. This
+            is derived from the reveal values sent by the dirauths
+            during the voting session.
 
-     (c) The shared random value of the previous time period.
+        (c) The shared random value of the previous time period. This
+            is the same shared random value that was included in the
+            votes.
 
    - For the next 24 hours, until the next 12:00 UTC consensus,
      authorities should include in their votes the shared random value
@@ -67,11 +72,10 @@ Title: Computing Shared Randomness During the Tor Voting Process
      time period. These values should also be included in the
      resulting consensuses, so that they are available to the clients.
 
-   During the first two days from the deployment of the system, the
-   system will be bootstrapping. This bootstrapping procedure is
-   specified in section [BOOTSTRAP].
+   The system also has a small bootstrapping procedure that is
+   described in [BOOTSTRAP].
 
-2.2. Commit & Reveal During Voting
+2.2. Commit & Reveal During Voting [CRVOTING]
 
    An authority that wants to commit to a value during a vote, should
    generate a random 256-bit value R, and include its commitment in
@@ -82,22 +86,21 @@ Title: Computing Shared Randomness During the Tor Voting Process
    where the commitment value C is a base64-encoded SHA-256 hash of a 256-bit
    random value R.
 
-   # XXX should we make a more elaborate construction?
-   # like H(value | time_period_num)? why?
+   XXX should we make a more elaborate construction?
+       like H(value | time_period_num)? why? bad rng? so?
 
-   When the authority wants to reveal a previously commited value, it adds the
-   following line to its vote at 12h00 UTC so the revealed value can be present
-   in the 12h00 consensus.
+   When the authority wants to reveal a previously commited value, it
+   adds the following line to its vote at 12:00UTC:
 
       global-rand-reveal R'
 
    where the value R' is the actual value of a _previously_ commited value C'.
 
-   XXX What happens if the authority reveals a wrong value? Where do
-       the other dirauths check it?
+   XXX What happens if an authority reveals a wrong value? How do the
+       other dirauths check it?
 
-   An authority that wants to include a shared random value in its
-   vote would do it as follows:
+   An authority that wants to include an old shared random value in
+   its vote, does it as follows:
 
       global-rand-value TIME_PERIOD_NUM V
 
@@ -111,9 +114,9 @@ Title: Computing Shared Randomness During the Tor Voting Process
 
 2.4. Shared Randomness Calculation
 
-   A directory authority or client who wants to derive the final
-   shared random value V, should use the appropriate 12:00 consensus
-   and calculate V as follows:
+   A directory authority or client who wants to derive the shared
+   random value V, should use the appropriate 12:00 consensus and
+   calculate V as follows:
 
        V = SHA256(ID_a | R_a | ID_b | R_b | ID_c | R_c | ...)
 
@@ -138,7 +141,7 @@ Title: Computing Shared Randomness During the Tor Voting Process
 
          global-rand-value TIME_PERIOD_NUM V
 
-   as specified in the previous section.
+   with the same format as specified in section [CRVOTING]
 
    To maintain consistent ordering, the shared random values of the
    previous time period should be listed before the values of the
@@ -175,30 +178,30 @@ Title: Computing Shared Randomness During the Tor Voting Process
    To maintain consistent ordering, commitment values should be sorted
    in ascending order based on their directory authority ID.
 
-2.3. Commitment validation
-
-   When a directory authority receives a vote with a reveal value, it
-   MUST check the current active consensus and validate that the
-   reveal value indeed matches the included commitment from that
-   directory authority.
-
 2.5. Bootstrapping [BOOTSTRAP]
 
-   When this system gets first deployed, authorities will not have any
-   values to reveal so they will only issue commitments. Also,
-   authorities who restart between the commit and reveal phases, MAY
-   lose their state and not issue any reveal lines.
+   Commit-and-reveal systems work in 3 steps, whereas the voting
+   process of Tor has 2 steps, hence the system requires a small
+   bootstrapping phase of two days.
 
-   For this reason, authorities MUST be able to handle votes that only
-   have commitment entries. Authorities MUST also be able to handle
-   the case where an authority has commited in the past, but does not
-   follow up with a reveal.
+   When this system first gets deployed, authorities will not have any
+   values to reveal so they will only issue commitments. For this
+   reason, authorities MUST be able to handle votes that only have
+   commitment entries.
+
+   Also, authorities who restart between the commit and reveal phases,
+   MAY lose their state and not issue any reveal lines.  So,
+   authorities MUST also be able to handle the case where an authority
+   has commited in the past, but does not follow up with a reveal.
 
    XXX Don't we lose the opportunity to detect abort attacks then?
 
-   Furthermore, clients MUST NOT use the randomness from this system
-   till it has bootstrapped completely; that is, until two shared
-   random values are included in every consensus.
+   Furthermore, two shared random values are required for the HSDir
+   overlay periods to work properly as specified in prop224. Hence
+   clients MUST NOT use the randomness of this system till it has
+   bootstrapped completely; that is, until two shared random values
+   are included in every consensus. This should happen after three
+   12:00UTC consensuses has been produced which takes 48 hours.
 
 3. Security Analysis
 
@@ -213,6 +216,9 @@ XXX If commit-reveal fails, consensus should happen
 XXX What happens if a dirauth receives contains commitment that the other dirauth didn't?
 
 5.1. Example commitments/reveals in the consensus
+
+
+   XXX update this
 
    Let's say we are about to enter time period 180. The consensus
    needs to include three pieces of information:
