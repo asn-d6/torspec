@@ -1,4 +1,4 @@
-Title: On Computing Shared Randomness During the Tor Voting Process
+Title: Computing Shared Randomness During the Tor Voting Process
 
 0. Motivation
 
@@ -168,6 +168,10 @@ Title: On Computing Shared Randomness During the Tor Voting Process
 
 5. Appendix
 
+XXX If commit-reveal fails, consensus should happen
+
+XXX What happens if a dirauth receives contains commitment that the other dirauth didn't?
+
 5.1. Example commitments/reveals in the consensus
 
    Let's say we are about to enter time period 180. The consensus
@@ -199,7 +203,7 @@ Title: On Computing Shared Randomness During the Tor Voting Process
 	   received-reveal 180 49015F787433103580E3B66A1707A00E60F2D15B d867d3f88fa20d7cb936ecd93651adeedf473a6177218cd0987f462ff5511cb6
 	   received-reveal 180 585769C78764D58426B8B52B6651A5A71137189A 969eeff1eaac226a228cc61503effa46ea87d872ef3174365befc7c36ffa3c48
 
-       received-commitment 180 14C131DFC5C6F93646BE72FA1401C02A8DF2E8B4 d93844f8f37e55564be3f194656bf33b5d0fb5e589a0fe17eb7c2d4e8593ec9c
-	   received-commitment 180 23D15D965BC35114467363C165C4F724B64B4F66 4960a9ce196ee53a9ae6f2b038ebf5bb7949312406eabe79835e766b4a3d0d88
-	   received-commitment 180 49015F787433103580E3B66A1707A00E60F2D15B 7e332bcee418f7d700927c946d36341f0651d6d90997b58d3d5441dec96b2e74
-	   received-commitment 180 585769C78764D58426B8B52B6651A5A71137189A d2b6d0723608af24de1b526a7cb97148f191bc951fe632dea5d89f1ff3407fea
+       received-commitment 181 14C131DFC5C6F93646BE72FA1401C02A8DF2E8B4 d93844f8f37e55564be3f194656bf33b5d0fb5e589a0fe17eb7c2d4e8593ec9c
+	   received-commitment 181 23D15D965BC35114467363C165C4F724B64B4F66 4960a9ce196ee53a9ae6f2b038ebf5bb7949312406eabe79835e766b4a3d0d88
+	   received-commitment 181 49015F787433103580E3B66A1707A00E60F2D15B 7e332bcee418f7d700927c946d36341f0651d6d90997b58d3d5441dec96b2e74
+	   received-commitment 181 585769C78764D58426B8B52B6651A5A71137189A d2b6d0723608af24de1b526a7cb97148f191bc951fe632dea5d89f1ff3407fea
