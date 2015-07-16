@@ -33,8 +33,8 @@ Title: Computing Shared Randomness During the Tor Voting Process
 
 2.1. Design Overview
 
-   The commit-and-reveal process aims to produce a fresh global random
-   value everyday at 12:00UTC.
+   The commit-and-reveal protocol aims to produce a fresh global
+   random value everyday at 12:00UTC.
 
    Also, according to prop224, clients might need either the current
    shared random value or the shared random value from the previous
@@ -210,11 +210,25 @@ Title: Computing Shared Randomness During the Tor Voting Process
 
 3. Security Analysis (maybe move after discussion section)
 
-3.1. Attacker can stop consensus from happening
+3.1. Security of commit&reveal and future directions
 
-   XXX
+  The security of commit-and-reveal protocols is well understood, and
+  has certain flaws. Basically, the protocol is insecure to the extent
+  that an adversary who controls b of the authorities gets to choose
+  among 2^b outcomes for the result of the protocol. However, an
+  attacker who is not a dirauth is not able to influence the outcome
+  at all.
 
-3.2. Security of commit&reveal and future directions
+  We believe that this system offers sufficient security especially
+  compared to the current situation. More secure solutions require
+  much more advanced crypto and more complex protocols so this seems
+  like an acceptable solution [XXX].
+
+3.2. Dirauth can stop 12:00UTC consensus from happening
+
+   This proposal provides yet another way that dirauths can use to
+   stop a consensus from happening. 
+
 
 4. Discussion
 
@@ -276,9 +290,7 @@ Title: Computing Shared Randomness During the Tor Voting Process
 
 5. Appendix
 
-XXX If commit-reveal fails, consensus should happen
-
-XXX What happens if a dirauth receives contains commitment that the other dirauth didn't?
+XXX If during voting the commit-reveal fails, consensus should happen
 
 5.1. Example commitments/reveals in the consensus
 
