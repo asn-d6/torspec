@@ -115,13 +115,12 @@ Status: Draft
    generate a random 256-bit value R, and include its commitment in
    its 12:00 UTC vote as follows:
 
-      global -rand-commitment sha256 C
+      global-rand-commitment sha256 C
 
-   where the commitment value C is a base64-encoded SHA-256 hash of a
-   256-bit random value R.
+   where the commitment value C is a base64-encoded SHA-256 hash of R.
+   The value C is constructed as follows:
 
-   XXX should we make a more elaborate construction for commitments?
-       like H(value | time_period_num)? why? bad rng? so?
+      C = base64-encode( SHA256(TIME_PERIOD_NUM | R) )
 
 2.2.2. Encoding reveals in votes
 
@@ -130,11 +129,11 @@ Status: Draft
 
       global-rand-reveal C R
 
-   where C is the commited value and R is its actual value.
+   where C is the commited value described in the previous section and R
+   is its actual random value base64-encoded.
 
-   XXX should we also include the current time period number here (and
-       in the commit)? it will make it nicer to read, and might help
-       us find any bugs.
+   To verify the revealed value, the TIME_PERIOD_NUM is needed to
+   reconstruct C has detailed in section 2.2.1.
 
 2.2.3. Vote validation
 
@@ -151,7 +150,11 @@ Status: Draft
        happen enough that we should worry (during kernel upgrades)?
        see section [CARRYCOMMIT] for a solution.
 
-2.4. Shared Randomness Calculation [SRCALC]
+   XXX We should carry on the commitments so it changes section 2.4.1
+   because now we would have same consensus at each hour instead of a
+   "different" one. --dgoulet
+
+2.3. Shared Randomness Calculation [SRCALC]
 
    When directory authorities receive all the reveal values during the
    12:00UTC voting session, they must generate the shared random value
@@ -159,20 +162,18 @@ Status: Draft
    shared random value V, should use the appropriate reveal values for
    that time period and calculate V as follows:
 
-       V = SHA256(TIME_PERIOD_NUM, ID_a | R_a | ID_b | R_b | ID_c | R_c | ...)
+       V = SHA256(TIME_PERIOD_NUM | ID_a | R_a | ID_b | R_b | ...)
 
    where the ID_k value is the identity fingerprint of directory
    authority k and R_k is its corresponding reveal value of that
    authority for that time period. And TIME_PERIOD_NUM is the time
-   period number that the shared random value is relevant for (the
-   time period number can be computed as described in section
-   TIME-PERIODS of prop224)
+   period number for the computed shared random value (the time period
+   number can be computed as described in section TIME-PERIODS of
+   prop224)
 
-   XXX specify what "is relevant for" means above.
+2.4. Shared Randomness Information in the Consensus
 
-2.3. Shared Randomness Information in the Consensus
-
-2.3.1. Overview
+2.4.1. Overview
 
    Authorities need to include shared randomness information in the
    consensus so that it can be read by clients. In this proposal,
@@ -180,7 +181,7 @@ Status: Draft
    consensus, depending on whether it's a 12:00UTC consensus or not
    (also see discussion section 4.2 XXX).
 
-2.3.1.1. Shared Randomness Information in 12:00UTC Consensus
+2.4.1.1. Shared Randomness Information in 12:00UTC Consensus
 
    When computing the 12:00UTC consensus, directory authorities should
    have included their commit and reveal values for that period in
@@ -203,7 +204,7 @@ Status: Draft
    - The shared random value for the previous time period. This has
      already been calculated.
 
-2.3.1.2. Shared Randomness Information in non-12:00UTC Consensus
+2.4.1.2. Shared Randomness Information in non-12:00UTC Consensus
 
    However, when computing a consensus not at 12:00UTC, directory
    authorities do not need to include commitment information in the
@@ -222,7 +223,7 @@ Status: Draft
        start echoing the shared random value included in the
        consensus, or should it wait till the next 12:00UTC?
 
-2.3.2. Shared Random Value in the Consensus
+2.4.2. Shared Random Value in the Consensus
 
    In the consensus, shared random values should be included in the
    following format:
@@ -230,7 +231,7 @@ Status: Draft
          global-rand-value TIME_PERIOD_NUM V
 
    where V is the actual shared random value that should be used by
-   clients. It's computed as specified in the section above.
+   clients. It's computed as specified in the section [SRCALC].
 
    To maintain consistent ordering, the shared random values of the
    previous time period should be listed before the values of the
@@ -240,19 +241,24 @@ Status: Draft
        need to keep on advertising the old shared random value?
        should a new TIME_PERIOD_NUM be used for the old values?
 
-2.3.3. Commitments in the Consensus
+   XXX I do think that the TIME_PERIOD_NUM should be incremented and we
+   simply carry on the old V values. --dgoulet
 
-   A commitment should be placed in the consensus using the following format:
+2.4.3. Commitments in the Consensus
+
+   A commitment should be placed in the consensus using the following
+   format:
 
      global-rand-commitment TIME_PERIOD_NUM ID C
 
-   where ID is the identity fingerprint of the directory authority and
-   C is the commitment of that directory authority.
+   where ID is the identity fingerprint of the directory authority and C
+   is the commitment of that directory authority. See section [CRVOTING]
+   that details how C is computed.
 
    To maintain consistent ordering, commitment values should be sorted
    in ascending order based on their directory authority ID.
 
-2.4. Bootstrapping [BOOTSTRAP]
+2.5. Bootstrapping [BOOTSTRAP]
 
    Commit-and-reveal systems work in 3 steps, whereas the voting
    process of Tor has 2 steps, hence the system requires a small
@@ -278,7 +284,7 @@ Status: Draft
    are included in every consensus. This should happen after three
    12:00UTC consensuses have been produced, which takes 48 hours.
 
-2.5. If The Consensus At 12:00UTC Does Not Happen
+2.6. If The Consensus At 12:00UTC Does Not Happen
 
   If the consensus at 12:00UTC fails to be created, then there will be
   no new shared random value for the day.
@@ -290,94 +296,6 @@ Status: Draft
   Clients should keep on using the old shared random values.
 
   Security issues with this design are discussed in section [SABOTAGE].
-
-3. Discussion
-
-3.1. Should commitments get carried in every consensus? [CARRYCOMMIT]
-
-   Currently, the consensus at 12:00UTC contains different shared
-   randomness info compared to any other consensus. Specifically,
-   *only the consensus at 12:00UTC* contains the commitment values
-   from the voting session. Dirauths are expected to cache the
-   commitment values for 24hours in their memory, so that they can
-   verify the reveal values later on.
-
-   We decided to not carry the commitments in all the consensuses,
-   because it's not actually useful for clients or dirauths. We also
-   thought that it would make the consensus creation process more
-   complex.
-
-   *But*, if we included the commitment values in every consensus, we
-   would not need to have a different behavior for the 12:00UTC
-   consensus and the other consensuses. We could just carry the values
-   in every consensus, and update them every 12:00UTC.
-
-   This is very worth thinking about, since it might actually make the
-   consensus creation logic easier.
-
-   Also, directory authorities that just rebooted will be able to
-   verify revealed values even if they don't have the 12:00UTC
-   consensus. This seems like a big plus.
-
-4.3 Dirauths save their reveal values on disk? [STOREREVEAL]
-
-   This proposal doesn't mandate a directory authority to save its
-   revealed value on disk. The potential of saving it on disk would
-   allow a possible recovery in case of reboot. That is the authority
-   could read the saved value and use it at the next 12h00UTC voting.
-
-4.4 Why the added complexity from proposal 225?
-
-   The complexity difference between this proposal and prop225 is in
-   part because prop225 doesn't specify anything on how the shared
-   random value gets to the client.
-
-   This proposal instead spends lots of effort specifying how the two
-   shared random values can always be readily accessible to clients.
-
-4.1 Shared random or revealed values in the consensus
-
-   The current approach is to publish only the shared random value in
-   the consensus. However, we could also publish the revealed values
-   instead and let the clients compute the shared random value.
-
-   We chose to not take this approach because if we assume that a
-   client sees the consensus as trustable entity, it means that if the
-   revealed values are voted correctly, the resulting shared random is
-   trustable.
-
-   Also, publishing only the shared random in the consensus adds two
-   extra lines in the consensus (current and previous shared random)
-   instead of N*2 lines of revealed values where N is the amount of
-   directory authorities.
-
-4.5. Why not make a new document for this thing?
-
-   Another way to achieve the goals of this propoposal, would be to
-   create an entirely new directory document and voting procedure that
-   is only used every 24 hours for shared randomness derivation.
-
-   This would simplify things since that new document does not need to
-   be recomputed every hour like the consensus. Instead, it would only
-   need to be changed every 24 hours or in any arbitrary time
-   period. This is a bit similar to what prop225 does.
-
-   This would also separate the consensus document from the random
-   number generation procedure, which might be cleaner since bugs in
-   one procedure would not influence the other.
-
-   We decided to not take this approach in this proposal, because of
-   the additional engineering cost of introducing a new directory
-   document, specifying how the voting will happen, getting it cached
-   by directory caches and introducing new logic for clients to fetch
-   it.
-
-   An alternative design, is to treat the 12:00UTC consensus as a
-   special document, and make a special URL for it so that clients can
-   use to fetch it (/tor/rendezvous/shared_rand_consensus or
-   something). This means that we don't need to include any shared
-   randomness information in the non-12:00UTC consensuses. It's still
-   a bit awkward for clients to use outdated consensuses though.
 
 3. Security Analysis
 
@@ -416,7 +334,6 @@ Status: Draft
   from happening, then no shared randomness will be produced for this
   time period.
 
-
   While this is a big issue, we think it's acceptable for now, since
   the sabotage of a 12:00UTC consensus is detectable.  Also, prop243
   raised the requirement for being an HSDir to "Stable", which means
@@ -436,6 +353,94 @@ Status: Draft
   randomness values clients should use at any time (since different
   clients can have different consensuses) and how many shared random
   values each consensus should contain. This seems nontrivial.
+
+4. Discussion
+
+4.1. Should commitments get carried in every consensus? [CARRYCOMMIT]
+
+  Currently, the consensus at 12:00UTC contains different shared
+  randomness info compared to any other consensus. Specifically,
+  *only the consensus at 12:00UTC* contains the commitment values
+  from the voting session. Dirauths are expected to cache the
+  commitment values for 24hours in their memory, so that they can
+  verify the reveal values later on.
+
+  We decided to not carry the commitments in all the consensuses,
+  because it's not actually useful for clients or dirauths. We also
+  thought that it would make the consensus creation process more
+  complex.
+
+  *But*, if we included the commitment values in every consensus, we
+  would not need to have a different behavior for the 12:00UTC
+  consensus and the other consensuses. We could just carry the values
+  in every consensus, and update them every 12:00UTC.
+
+  This is very worth thinking about, since it might actually make the
+  consensus creation logic easier.
+
+  Also, directory authorities that just rebooted will be able to
+  verify revealed values even if they don't have the 12:00UTC
+  consensus. This seems like a big plus.
+
+4.2 Dirauths save their reveal values on disk? [STOREREVEAL]
+
+  This proposal doesn't mandate a directory authority to save its
+  revealed value on disk. The potential of saving it on disk would
+  allow a possible recovery in case of reboot. That is the authority
+  could read the saved value and use it at the next 12h00UTC voting.
+
+4.3 Why the added complexity from proposal 225?
+
+  The complexity difference between this proposal and prop225 is in
+  part because prop225 doesn't specify anything on how the shared
+  random value gets to the client.
+
+  This proposal instead spends lots of effort specifying how the two
+  shared random values can always be readily accessible to clients.
+
+4.4 Shared random or revealed values in the consensus
+
+  The current approach is to publish only the shared random value in
+  the consensus. However, we could also publish the revealed values
+  instead and let the clients compute the shared random value.
+
+  We chose to not take this approach because if we assume that a
+  client sees the consensus as trustable entity, it means that if the
+  revealed values are voted correctly, the resulting shared random is
+  trustable.
+
+   Also, publishing only the shared random in the consensus adds two
+   extra lines in the consensus (current and previous shared random)
+   instead of N*2 lines of revealed values where N is the amount of
+   directory authorities.
+
+4.5. Why not make a new document for this thing?
+
+   Another way to achieve the goals of this propoposal, would be to
+   create an entirely new directory document and voting procedure that
+   is only used every 24 hours for shared randomness derivation.
+
+   This would simplify things since that new document does not need to
+   be recomputed every hour like the consensus. Instead, it would only
+   need to be changed every 24 hours or in any arbitrary time
+   period. This is a bit similar to what prop225 does.
+
+   This would also separate the consensus document from the random
+   number generation procedure, which might be cleaner since bugs in
+   one procedure would not influence the other.
+
+   We decided to not take this approach in this proposal, because of
+   the additional engineering cost of introducing a new directory
+   document, specifying how the voting will happen, getting it cached
+   by directory caches and introducing new logic for clients to fetch
+   it.
+
+   An alternative design, is to treat the 12:00UTC consensus as a
+   special document, and make a special URL for it so that clients can
+   use to fetch it (/tor/rendezvous/shared_rand_consensus or something).
+   This means that we don't need to include any shared randomness
+   information in the non-12:00UTC consensuses. It's still a bit awkward
+   for clients to use outdated consensuses though.
 
 5. Appendix
 
