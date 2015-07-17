@@ -396,7 +396,7 @@ XXX also provide examples for voting and for non-12:00UTC consensus??
    Let's say we are about to enter time period 180. The 12:00UTC
    consensus needs to include three pieces of information:
 
-   - All the commitment values for this time period (180), which will be
+   - All the commitment values for this time period, which will be
      revealed in the beginning of time period 181.
 
    - The shared random value for this time period (180).
@@ -406,10 +406,10 @@ XXX also provide examples for voting and for non-12:00UTC consensus??
    After the appropriate ordering they might look like this in the
    consensus:
 
-       global-rand-commitment 180 14C131DFC5C6F93646BE72FA1401C02A8DF2E8B4 d93844f8f37e55564be3f194656bf33b5d0fb5e589a0fe17eb7c2d4e8593ec9c
-	   global-rand-commitment 180 23D15D965BC35114467363C165C4F724B64B4F66 4960a9ce196ee53a9ae6f2b038ebf5bb7949312406eabe79835e766b4a3d0d88
-	   global-rand-commitment 180 49015F787433103580E3B66A1707A00E60F2D15B 7e332bcee418f7d700927c946d36341f0651d6d90997b58d3d5441dec96b2e74
-	   global-rand-commitment 180 585769C78764D58426B8B52B6651A5A71137189A d2b6d0723608af24de1b526a7cb97148f191bc951fe632dea5d89f1ff3407fea
+       global-rand-commitment 181 14C131DFC5C6F93646BE72FA1401C02A8DF2E8B4 d93844f8f37e55564be3f194656bf33b5d0fb5e589a0fe17eb7c2d4e8593ec9c
+	   global-rand-commitment 181 23D15D965BC35114467363C165C4F724B64B4F66 4960a9ce196ee53a9ae6f2b038ebf5bb7949312406eabe79835e766b4a3d0d88
+	   global-rand-commitment 181 49015F787433103580E3B66A1707A00E60F2D15B 7e332bcee418f7d700927c946d36341f0651d6d90997b58d3d5441dec96b2e74
+	   global-rand-commitment 181 585769C78764D58426B8B52B6651A5A71137189A d2b6d0723608af24de1b526a7cb97148f191bc951fe632dea5d89f1ff3407fea
 
        global-rand-value 180 d6ba4fb19951b0a0175af857ec4891947aaf65d7de043c48a38b2daf2df0a329
 
