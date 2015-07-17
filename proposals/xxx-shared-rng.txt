@@ -93,9 +93,10 @@ Status: Draft
    This concludes the commit-and-reveal procedure at noon everyday.
 
    For the next 24 hours, up until the next 12:00 UTC consensus,
-   authorities must include in the consensus the shared random value
-   of this time period, and the shared random value of the previous
-   time period so that they are readily available for clients.
+   authorities must include in the consensus the commitment values,
+   the shared random value of this time period, and the shared random
+   value of the previous time period so that they are readily
+   available for clients.
 
    The system also has a small bootstrapping procedure that is
    described in [BOOTSTRAP].
@@ -122,12 +123,16 @@ Status: Draft
 
       C = base64-encode( SHA256(TIME_PERIOD_NUM | R) )
 
+   where TIME_PERIOD_NUM is the current time period number (the time
+   period number can be computed as described in section TIME-PERIODS
+   of prop224).
+
 2.2.2. Encoding reveals in votes
 
    When the authority wants to reveal a previously commited value, it
    adds the following line to its vote at 12:00UTC:
 
-      global-rand-reveal C R
+      global-rand-reveal sha256 C R
 
    where C is the commited value described in the previous section and R
    is its actual random value base64-encoded.
@@ -148,15 +153,6 @@ Status: Draft
    Furthermore, directory authorities MUST NOT derive a new shared
    random value if less than 3 authorities revealed values on a round.
 
-   XXX what should a dirauth that just booted up do, when it sees a
-       reveal value but does not have the commit value? will this
-       happen enough that we should worry (during kernel upgrades)?
-       see section [CARRYCOMMIT] for a solution.
-
-   XXX We should carry on the commitments so it changes section 2.4.1
-   because now we would have same consensus at each hour instead of a
-   "different" one. --dgoulet
-
 2.3. Shared Randomness Calculation [SRCALC]
 
    When directory authorities receive all the reveal values during the
@@ -169,29 +165,14 @@ Status: Draft
 
    where the ID_k value is the identity fingerprint of directory
    authority k and R_k is its corresponding reveal value of that
-   authority for that time period. And TIME_PERIOD_NUM is the time
-   period number for the computed shared random value (the time period
-   number can be computed as described in section TIME-PERIODS of
-   prop224)
+   authority for that time period.
 
 2.4. Shared Randomness Information in the Consensus
 
-2.4.1. Overview
+   Authorities add the following information to the consensus:
 
-   Authorities include the shared randomness values in the consensus
-   so that they can be read by clients. The consensus also includes
-   the commitments from the 12:00UTC voting session.
-
-2.4.1.1. Shared Randomness Information in 12:00UTC Consensus
-
-   When computing the 12:00UTC consensus, directory authorities should
-   have included their commit and reveal values for that period in
-   their 12:00UTC votes.
-
-   Using that data, authorities add the following information to the
-   12:00UTC consensus:
-
-   - A list of all the commitments received during voting.
+   - A list of all the commitments received during the previous
+     commit-and-reveal session.
 
      This is done to avoid attacks where a malicious authority sends
      different commitment values to different authorities. By
@@ -199,32 +180,20 @@ Status: Draft
      use the opinion of the majority on which commitments values
      should be active.
 
+     These commitments get updated in every 12:00UTC consensus, but
+     are carried intact in all the other consensuses.
+
    - The shared random value for the current time period, calculated
      as specified in section [SRCALC].
 
    - The shared random value for the previous time period. This has
      already been calculated.
 
-2.4.1.2. Shared Randomness Information in non-12:00UTC Consensus
-
-   However, when computing a consensus not at 12:00UTC, directory
-   authorities do not need to include commitment information in the
-   consensus.
-
-   The authorities still include the previously generated shared
-   random values as normal. These will be carried intact, till the
-   next 12:00UTC commit-and-reveal session.
-
-   See discussion section [CARRYCOMMIT] for a design where we carry
-   the commitment values in every consensus, and update them every
-   noon. So that we don't need have different behavior at 12:00UTC and
-   not.
-
    XXX what happens if a dirauth reboots in the evening? should it
        start echoing the shared random value included in the
        consensus, or should it wait till the next 12:00UTC?
 
-2.4.2. Shared Random Value in the Consensus
+2.4.1. Shared Random Value in the Consensus
 
    In the consensus, shared random values should be included in the
    following format:
@@ -245,7 +214,7 @@ Status: Draft
    XXX I do think that the TIME_PERIOD_NUM should be incremented and we
    simply carry on the old V values. --dgoulet
 
-2.4.3. Commitments in the Consensus
+2.4.2. Commitments in the Consensus
 
    A commitment should be placed in the consensus using the following
    format:
@@ -356,32 +325,6 @@ Status: Draft
   values each consensus should contain. This seems nontrivial.
 
 4. Discussion
-
-4.1. Should commitments get carried in every consensus? [CARRYCOMMIT]
-
-  Currently, the consensus at 12:00UTC contains different shared
-  randomness info compared to any other consensus. Specifically,
-  *only the consensus at 12:00UTC* contains the commitment values
-  from the voting session. Dirauths are expected to cache the
-  commitment values for 24hours in their memory, so that they can
-  verify the reveal values later on.
-
-  We decided to not carry the commitments in all the consensuses,
-  because it's not actually useful for clients or dirauths. We also
-  thought that it would make the consensus creation process more
-  complex.
-
-  *But*, if we included the commitment values in every consensus, we
-  would not need to have a different behavior for the 12:00UTC
-  consensus and the other consensuses. We could just carry the values
-  in every consensus, and update them every 12:00UTC.
-
-  This is very worth thinking about, since it might actually make the
-  consensus creation logic easier.
-
-  Also, directory authorities that just rebooted will be able to
-  verify revealed values even if they don't have the 12:00UTC
-  consensus. This seems like a big plus.
 
 4.2 Dirauths save their reveal values on disk? [STOREREVEAL]
 
