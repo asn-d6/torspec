@@ -115,7 +115,7 @@ Status: Draft
    generate a random 256-bit value R, and include its commitment in
    its 12:00 UTC vote as follows:
 
-      global -rand-commitment sha256 C
+      global-rand-commitment sha256 C
 
    where the commitment value C is a base64-encoded SHA-256 hash of a
    256-bit random value R.
@@ -142,9 +142,12 @@ Status: Draft
    other dirauths need to check that the reveal values match the old
    commitments by that dirauth from 24 hours ago.
 
-   An authority that has committed to value that does not match the
+   An authority that committed to value that does not match the
    revealed value, MUST be ignored during the shared randomness
    calculation (its reveal values should not be considered).
+
+   Furthermore, directory authorities MUST NOT derive a new shared
+   random value if less than 3 authorities revealed values on a round.
 
    XXX what should a dirauth that just booted up do, when it sees a
        reveal value but does not have the commit value? will this
@@ -174,11 +177,9 @@ Status: Draft
 
 2.3.1. Overview
 
-   Authorities need to include shared randomness information in the
-   consensus so that it can be read by clients. In this proposal,
-   authorities include different shared randomness information in the
-   consensus, depending on whether it's a 12:00UTC consensus or not
-   (also see discussion section 4.2 XXX).
+   Authorities include the shared randomness values in the consensus
+   so that they can be read by clients. The consensus also includes
+   the commitments from the 12:00UTC voting session.
 
 2.3.1.1. Shared Randomness Information in 12:00UTC Consensus
 
