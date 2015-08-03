@@ -293,11 +293,17 @@ Status: Draft
    An authority that wants to derive the shared random value V, should use the
    appropriate reveal values for that time period and calculate V as follows:
 
-      V = H(ID_a | R_a | ID_b | R_b | ...)
+      V = H("shared-random" | INT_8(reveal_num) | INT_8(version) |
+            previous_SR | ID_k | R_k | ...)
 
-   where the ID_k value is the identity fingerprint of directory authority k
-   and R_k is its corresponding reveal value of that authority for the current
-   period. H is the sha256 for protocol version 1.
+   where "reveal_num" is the number of revealed values in this construction,
+   "version" is the protocol version number, "previous_SR" is the previous
+   shared random value if any, the "ID_k" value is the identity fingerprint of
+   directory authority k and R_k is its corresponding reveal value of that
+   authority for the current period. ID_k are ordered by using the hex-encoded
+   value of the identity fingerprint of the authority in ascending order.
+
+   H is sha256 for protocol version 1.
 
    XXX Should the hashing here include more elements? Like the previous random
        value for chaining? Or the current date? See how the NIST beacon does it
