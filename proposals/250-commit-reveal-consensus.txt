@@ -408,7 +408,7 @@ Status: Draft
 
    The commitment value COMMIT is constructed as follows:
 
-      C = base64-encode( SHA256(REVEAL) )
+      COMMIT = base64( SHA256(REVEAL) )
 
 4.1.2 Encoding commit/reveal values received by other authorities [COMMITOTHER]
 
