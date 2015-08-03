@@ -290,25 +290,24 @@ Status: Draft
 
 3.3.1. Shared Randomness Calculation [SRCALC]
 
-   An authority that wants to derive the shared random value V, should use the
-   appropriate reveal values for that time period and calculate V as follows:
+   An authority that wants to derive the shared random value SRV, should use the
+   appropriate reveal values for that time period and calculate SRV as follows.
 
-      V = H("shared-random" | INT_8(reveal_num) | INT_8(version) |
-            previous_SR | ID_k | R_k | ...)
+      HASHED_REVEALS = H(ID_a | R_a | ID_b | R_b | ..)
 
-   where "reveal_num" is the number of revealed values in this construction,
-   "version" is the protocol version number, "previous_SR" is the previous
-   shared random value if any, the "ID_k" value is the identity fingerprint of
-   directory authority k and R_k is its corresponding reveal value of that
-   authority for the current period. ID_k are ordered by using the hex-encoded
-   value of the identity fingerprint of the authority in ascending order.
+      SRV = HMAC(HASHED_REVEALS,
+                 "shared-random" | INT_8(reveal_num) | INT_8(version) | previous_SR)
 
-   H is sha256 for protocol version 1.
+   where the ID_a value is the identity fingerprint of directory authority a and
+   R_a is the corresponding reveal value of that authority for the current
+   period. ID_a, R_a pairs are ordered based on the identity fingerprint of the
+   authority in ascending order.
 
-   XXX Should the hashing here include more elements? Like the previous random
-       value for chaining? Or the current date? See how the NIST beacon does it
-       in case we can steal some additional RNG security properties:
-               http://hackaday.com/2014/12/19/nist-randomness-beacon/
+   Also, "reveal_num" is the number of revealed values in this construction,
+   "version" is the protocol version number and "previous_SR" is the previous
+   shared random value if any.
+
+   For protocol version 1, H is SHA256 and HMAC is HMAC-SHA256.
 
 3.4. Bootstrapping Procedure
 
