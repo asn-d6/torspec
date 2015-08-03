@@ -202,10 +202,13 @@ Status: Draft
    transcribed to the shared random document and only if it has been seen by
    the majority.
 
-   Also, an authority should not be able to register a commitment value for a
-   different authority. Hence, an authority X should only vote and place in
-   the SR doc commitments by authority Y, iff authority Y included that
-   commitment in its vote.
+   It's important that an evil authority is not allowed to register a commitment
+   value and assign it to another authority. Hence, an authority X should only
+   vote and place in the SR doc commitments by authority Y, iff authority Y
+   included that commitment in its vote, or that commitment was included on the
+   previous SR doc and assigned to Y. The second condition allows us to carry
+   commitments of absent authorities as long as they had once commited to that
+   value (see [REBOOT]).
 
 3.1.3. First & Last Round Of Commitment Phase [FIRSTLASTROUND]
 
@@ -349,9 +352,9 @@ Status: Draft
    The security of this proposal strongly relies on forming majority opinion
    so it's important for the number of participants to always be well defined:
 
-   In the voting session right before creating the SR doc, we define the
-   number of active participants to be the number of directory authorities
-   that included commit/reveal values in their votes.
+   In the voting session right before creating the SR doc, we define the number
+   of active participants to be the number of directory authorities that
+   included their *own* commit/reveal values in their votes.
 
    As specified in sections [SRDOCCOMMIT] and [SRDOCREVEAL], a commit/reveal
    value should be transcribed to the SR doc if and only if the majority voted
