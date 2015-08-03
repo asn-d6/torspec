@@ -130,9 +130,9 @@ Status: Draft
    previous time period must be present in the document at all times if they
    are available.
 
-   A shared random document requires strictly more than half authority
-   signatures to be considered valid. As this proposal is being written, there
-   are 9 authorities thus we would need 5 authorities.
+   A shared random document requires signatures from strictly more than half of
+   the authorities to be considered valid. As this proposal is being written,
+   there are 9 authorities thus we would need 5 authority signatures.
 
 2.5. Protocol Illustration
 
