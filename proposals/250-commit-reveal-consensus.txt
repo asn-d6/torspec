@@ -26,7 +26,7 @@ Status: Draft
    However, directory authority operators feel unsafe running a third-party
    script that opens TCP ports and accepts connections from the Internet.
    Hence, this proposal aims to embed the commit-and-reveal idea in the Tor
-   voting process which should makes it smoother to deploy and maintain.
+   voting process which should make it smoother to deploy and maintain.
 
    Another idea proposed specifically for Tor is Nick Hopper's "A threshold
    signature-based proposal for a shared RNG" which was never turned into an
@@ -130,9 +130,9 @@ Status: Draft
    previous time period must be present in the document at all times if they
    are available.
 
-   A shared random document requires 50% + 1 authority signatures to be
-   considered valid. As this proposal is being written, there are 9
-   authorities thus we would need 5.
+   A shared random document requires strictly more than half authority
+   signatures to be considered valid. As this proposal is being written, there
+   are 9 authorities thus we would need 5 authorities.
 
 2.5. Protocol Illustration
 
@@ -354,7 +354,8 @@ Status: Draft
    will only be transcribed if 4 or more participants agreed on it.
 
    Furthermore, as specified in section [SRDOC], the shared random document is
-   considered valid only if it is signed by 50% + 1 authorities.
+   considered valid only if it is signed by strictly more than half
+   authorities.
 
    XXX The number of active participants is dynamic as authorities leave and
        join the protocol. Since the number of active participants is dynamic ,
