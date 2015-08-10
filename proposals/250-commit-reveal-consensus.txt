@@ -301,14 +301,16 @@ Status: Draft
       SRV = HMAC(HASHED_REVEALS,
                  "shared-random" | INT_8(reveal_num) | INT_8(version) | previous_SR)
 
-   where the ID_a value is the identity fingerprint of directory authority a and
-   R_a is the corresponding reveal value of that authority for the current
-   period. ID_a, R_a pairs are ordered based on the identity fingerprint of the
-   authority in ascending order.
+   where the ID_a value is the identity fingerprint of directory authority 'a'
+   and R_a is the corresponding reveal value of that authority for the current
+   period.
 
    Also, "reveal_num" is the number of revealed values in this construction,
    "version" is the protocol version number and "previous_SR" is the previous
    shared random value if any.
+
+   To maintain consistent ordering, ID_a | R_a pairs are ordered based on the
+   identity fingerprint of the authority in ascending order.
 
    For protocol version 1, H is SHA256 and HMAC is HMAC-SHA256.
 
