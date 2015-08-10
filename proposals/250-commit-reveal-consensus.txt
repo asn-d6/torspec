@@ -377,15 +377,16 @@ Status: Draft
 
 3.7. Shared Randomness Disaster Recovery [SRDISASTER]
 
-   If the consensus at 12:00UTC fails to be created, then there will be no new
+   If the consensus at 12:00UTC fails to be created, then there will be no fresh
    shared random value for the day.
 
-   Directory authorities should keep including the previous shared random
-   values in the consensus till the next 12:00UTC commit-and-reveal session.
-   The time period needs to be updated to reflect the current time period even
-   if the random value stays the same.
+   In this case, and assuming there is a previous shared random value, directory
+   authorities should use the following construction as the shared random value
+   of the day:
 
-   Clients should keep on using this shared random values.
+       SRV = HMAC(previous_SR, "shared-random-disaster")
+
+   where previous_SR is the previous shared random value.
 
 4. Specification [SPEC]
 
@@ -632,10 +633,10 @@ Status: Draft
 
 6.3. Why can't we recover if we fail to do a consensus at 12:00UTC?
 
-   Section [SRDISASTER] specifies that if the 12:00UTC consensus or SR doc
-   fails to be created, we fall back to the random value of the previous day
-   meaning authorities will carry the last valid SR values from the previous
-   microdescriptor consensus to the new one.
+   Section [SRDISASTER] specifies that if the 12:00UTC consensus or SR doc fails
+   to be created, we simply hash the random value of the previous day and use it
+   as the new shared random value. This changes the daily value but fails to
+   make it fresh, which is not optimal.
 
    Theoretically, we could recover by calculating the shared randomness of the
    day at 13:00UTC instead. However, adding such fallback logic would
