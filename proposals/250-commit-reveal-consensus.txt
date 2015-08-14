@@ -13,11 +13,12 @@ Status: Draft
    predicted in advance or influenced by an attacker.
 
    Currently we need this random value to make the HSDir hash ring
-   unpredictable (#8244), which should resolve a wide class of hidden service
-   DoS attacks and should make it harder for people to gauge the popularity
-   and activity of target hidden services. Furthermore, this random value can
-   be used by other Tor-related protocols (or even non-Tor-related) like
-   OnioNS to introduce unpredictability to the protocol.
+   unpredictable (#8244), which should resolve a wide class of hidden
+   service DoS attacks and should make it harder for people to gauge
+   the popularity and activity of target hidden services. Furthermore
+   this random value can be used by other systems in need of fresh
+   global randomness like Tor-related protocols (e.g. OnioNS) or even
+   non-Tor-related (e.g. warrant canaries).
 
 1.2. Previous work
 
@@ -475,7 +476,7 @@ Status: Draft
         A document format version. For this specification, version is "1". The
         flavor is always "shared-random".
 
-    "created" SP YYYY-MM-DD SP HH:MM:SS NL
+    "valid-after" SP YYYY-MM-DD SP HH:MM:SS NL
 
         [Exactly once]
 
@@ -485,8 +486,9 @@ Status: Draft
 
         [Exactly once]
 
-        After this time, this document is invalid and shouldn't be used nor
-        trusted. The validity time period is 3 hours.
+        After this time, this document is expired and shouldn't be
+        used nor trusted. The validity time period is till the end of
+        the current protocol run (the upcoming noon).
 
     "protocol-phase" SP phase NL
 
