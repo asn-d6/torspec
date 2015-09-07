@@ -439,7 +439,7 @@ Status: Draft
         valid possible use case for an authority? If so, we could have a
         conflict that is actually a valid use case. [dgoulet]
 
-4.2. Persistent state of an authority
+4.2. Persistent State
 
    As a way to keep ground truth state in this protocol, an authority MUST
    keep a persistent state of the protocol.
