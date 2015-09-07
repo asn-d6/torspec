@@ -377,7 +377,7 @@ Supersedes: 225
    authorities. Commits and reveals share the same line, but reveals are
    optional.
 
-4.1.1 Encoding the authority's own commit/reveal value
+4.1.1 Encoding the authority's own commit/reveal value [COMMITENCODING]
 
    An authority that wants to commit (or reveal) a value during a vote, should
    generate a random 256-bit value REVEAL, and include its commitment COMMIT
@@ -422,7 +422,25 @@ Supersedes: 225
   To maintain consistent ordering, the shared random values of the previous
   period should be listed before the values of the current period.
 
-4.2. Persistent State of an Authority
+4.1.4. Conflict
+
+   If an authority sees two distinct commitments from an other authority in
+   the same period, the authority is broken or evil: you include both, thereby
+   proving there is a conflict:
+
+      "shared-rand-conflict" SP identity SP commit1 SP commit2 NL
+
+   where "identity" is the hex-encoded commitment's authority fingerprint.
+   "commit1" is the previous commit that the authority had in its state and
+   "commit2" is the new received commit of the same period. Both commit values
+   are constructed as specified in section [COMMITENCODING].
+
+   XXX: What if an authority votes then reboots without saving its commitment
+        value on disk and then comes back online and votes again. Is this a
+        valid possible use case for an authority? If so, we could have a
+        conflict that is actually a valid use case. [dgoulet]
+
+4.2. Persistent state of an authority
 
    As a way to keep ground truth state in this protocol, an authority MUST
    keep a persistent state of the protocol.
