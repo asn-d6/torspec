@@ -47,7 +47,7 @@ Status: Draft
 
    Our commit-and-reveal protocol aims to produce a fresh shared random value
    everyday at 12:00UTC. The final fresh random value is embedded in the
-   microdescriptor consensus document at that time.
+   consensus document at that time.
 
    Our protocol has two phases and uses the hourly voting procedure of Tor.
    Each phase lasts 12 hours, which means that 12 voting rounds happen in
@@ -70,7 +70,7 @@ Status: Draft
       Shared Randomness Calculation:
 
         At 12:00UTC, the shared random value is computed from the agreed
-        revealed values and added to the microdescriptor consensus.
+        revealed values and added to the consensus.
 
    This concludes the commit-and-reveal procedure at 12:00UTC everyday.
 
@@ -86,16 +86,16 @@ Status: Draft
    a given commitment value. However given a commitment value you cannot
    derive the underlying reveal value.
 
-2.3. Microdescriptor Consensus [MDCONS]
+2.3. Consensus [CONS]
 
-   Every hour, the microdescriptor consensus documents need to include the
-   shared random value of the day, as well as the shared random value of the
-   previous day. That's because either of these values might be needed at a
-   given time for a Tor client to access a hidden service according to section
-   [TIME-OVERLAP] of proposal 224. These means that these two values also need
-   to be included in votes and in the authority state as well.
+   Every hour, the consensus documents need to include the shared random value
+   of the day, as well as the shared random value of the previous day. That's
+   because either of these values might be needed at a given time for a Tor
+   client to access a hidden service according to section [TIME-OVERLAP] of
+   proposal 224. These means that these two values also need to be included in
+   votes and in the authority state as well.
 
-   Microdescriptor consensuses include:
+   The consensuses include:
 
       (a) The shared random value of the current time period. This is derived
           from the reveal values sent by the authorities during the voting
@@ -125,9 +125,8 @@ Status: Draft
          https://people.torproject.org/~asn/hs_notes/shared_rand.jpg
 
    For every hour, it shows the authority votes, the resulting state (SR) and
-   microdescriptor consensus.  The chain 'A_1 -> c_1 -> r_1' denotes that the
-   authority committed to the value c_1 which corresponds to the reveal value
-   r_1.
+   consensus. The chain 'A_1 -> c_1 -> r_1' denotes that the authority
+   committed to the value c_1 which corresponds to the reveal value r_1.
 
    The illustration depicts the first 25 hours of running the protocol. It
    starts with the very first commit round, then moves on to the second commit
@@ -252,8 +251,7 @@ Status: Draft
 3.3. Shared Random Value Calculation At 12:00UTC
 
    Finally, at 12:00UTC every day, authorities compute a fresh shared random
-   value and this value must be added to the microdescriptor consensus so
-   clients can use it.
+   value and this value must be added to the consensus so clients can use it.
 
    Authorities calculate the shared random value using the reveal values in
    their state as specified in subsection [SRCALC].
@@ -264,8 +262,7 @@ Status: Draft
 
    Authorities at 12:00UTC start including this new shared random value in
    their votes, replacing the one from two protocol runs ago. Authorities also
-   start including this new shared random value in the microdescriptor
-   consensus as well.
+   start including this new shared random value in the consensus as well.
 
    Apart from that, authorities proceed voting normally as they would in the
    first round of the commitment phase (section [COMMITMENTPHASE]).
@@ -297,8 +294,8 @@ Status: Draft
 
 3.4. Bootstrapping Procedure
 
-   As described in [MDCONS], two shared random values are required for the
-   HSDir overlay periods to work properly as specified in proposal 224. Hence
+   As described in [CONS], two shared random values are required for the HSDir
+   overlay periods to work properly as specified in proposal 224. Hence
    clients MUST NOT use the randomness of this system till it has bootstrapped
    completely; that is, until two shared random values are included in a
    consensus. This should happen after three 12:00UTC consensuses have been
@@ -596,8 +593,8 @@ Status: Draft
 
    Section [SRDISASTER] specifies that if the 12:00UTC SR value fails to be
    created, we fall back to the random value of the previous day meaning
-   authorities will carry the last valid SR values from the previous
-   microdescriptor consensus to the new one.
+   authorities will carry the last valid SR values from the previous consensus
+   to the new one.
 
    Theoretically, we could recover by calculating the shared randomness of the
    day at 13:00UTC instead. However, adding such fallback logic would
