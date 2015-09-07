@@ -15,9 +15,10 @@ Status: Draft
    Currently we need this random value to make the HSDir hash ring
    unpredictable (#8244), which should resolve a wide class of hidden service
    DoS attacks and should make it harder for people to gauge the popularity
-   and activity of target hidden services. Furthermore, this random value can
-   be used by other Tor-related protocols (or even non-Tor-related) like
-   OnioNS to introduce unpredictability to the protocol.
+   and activity of target hidden services. Furthermore this random value can
+   be used by other systems in need of fresh global randomness like
+   Tor-related protocols (e.g. OnioNS) or even non-Tor-related (e.g. warrant
+   canaries).
 
 1.2. Previous work
 
@@ -48,12 +49,6 @@ Status: Draft
    everyday at 12:00UTC. The final fresh random value is embedded in the
    microdescriptor consensus document at that time.
 
-   Our protocol uses a *new* consensus flavor document called "shared
-   randomness document" (SR doc). We use a new consensus document as a way to
-   keep ground truth state and also as a way to apply the majority (see
-   section [MAJORITY]) rule on commit and reveal values. It also allows
-   rebooting authorities to rejoin the protocol in some cases.
-
    Our protocol has two phases and uses the hourly voting procedure of Tor.
    Each phase lasts 12 hours, which means that 12 voting rounds happen in
    between. In short, the protocol works as follows:
@@ -62,9 +57,7 @@ Status: Draft
 
         Starting at 12:00UTC and for a period of 12 hours, authorities every
         hour send their commitments in their votes. They also include any
-        received commitments from other authorities, if available. From those
-        votes, a shared random document consensus is computed containing the
-        commitments decided by the majority.
+        received commitments from other authorities, if available.
 
       Reveal phase:
 
@@ -72,14 +65,12 @@ Status: Draft
         protocol at 12:00UTC. In this stage, authorities must reveal the value
         they committed to in the previous phase. The commitment and revealed
         values from other authorities, when available, are also added to the
-        vote. Then a shared random document consensus is computed containing
-        the commitments and the revealed values agreed on.
+        vote.
 
       Shared Randomness Calculation:
 
         At 12:00UTC, the shared random value is computed from the agreed
-        revealed values located in the shared random document and finally
-        added to the microdescriptor consensus.
+        revealed values and added to the microdescriptor consensus.
 
    This concludes the commit-and-reveal procedure at 12:00UTC everyday.
 
@@ -102,7 +93,7 @@ Status: Draft
    previous day. That's because either of these values might be needed at a
    given time for a Tor client to access a hidden service according to section
    [TIME-OVERLAP] of proposal 224. These means that these two values also need
-   to be included in votes and in SR documents as well.
+   to be included in votes and in the authority state as well.
 
    Microdescriptor consensuses include:
 
@@ -113,26 +104,19 @@ Status: Draft
       (b) The shared random value of the previous time period. This is the
           same shared random value that was included in the votes.
 
-2.4. Shared Random Document [SRDOC]
+2.4. Persistent State of the Protocol [STATE]
 
-   The Shared Random document is a consensus flavor that contains the current
-   state of our commit & reveal protocol. Since it uses the consensus
-   mechanism of Tor, we use it as a way to enforce majority voting on the
-   commitments and reveals without messing with the actual network status
-   consensus. See section [REBOOT] for detail on how this document is handled
-   when an authority reboots.
+   A directory authority needs to keep a persistent state on disk of the on
+   going protocol phases. This also allows an authority to join back the
+   protocol upon reboot.
 
-   During the commitment phase, the SR doc is populated with the commitments
-   of all authorities. Then during the reveal phase, it's also used to store
-   the reveal values as well.
+   During the commitment phase, it is populated with the commitments of all
+   authorities. Then during the reveal phase, the reveal values are also
+   stored in the state.
 
    As discussed previously, the shared random values from the current and
-   previous time period must be present in the document at all times if they
-   are available.
-
-   A shared random document requires 50% + 1 authority signatures to be
-   considered valid. As this proposal is being written, there are 9
-   authorities thus we would need 5.
+   previous time period must be present in the state at all times if they are
+   available.
 
 2.5. Protocol Illustration
 
@@ -140,7 +124,7 @@ Status: Draft
    find it here:
          https://people.torproject.org/~asn/hs_notes/shared_rand.jpg
 
-   For every hour, it shows the authority votes and the resulting SR doc and
+   For every hour, it shows the authority votes, the resulting state (SR) and
    microdescriptor consensus.  The chain 'A_1 -> c_1 -> r_1' denotes that the
    authority committed to the value c_1 which corresponds to the reveal value
    r_1.
@@ -168,9 +152,11 @@ Status: Draft
 
    The commit phase lasts from 12:00UTC to 00:00UTC.
 
-   The goal is that at the end of this phase, the shared random document MUST
-   contain a single commitment value from each authority (or none, if that
-   authority did not participate in this phase).
+   During this phase, an authority can commit as many values as it want
+   replacing the previous one, if any, thus ending up with only one single
+   commit value at the end of the phase. Although, in theory an authority
+   shouldn't do that, this is to support reboot or downtime during the phase
+   of an authority.
 
 3.1.1. Voting During Commitment Phase
 
@@ -180,31 +166,30 @@ Status: Draft
     - Any commitments received from other authorities.
     - The two previous shared random values produced by the protocol (if any).
 
-   After all votes have been received or pulled in, the authorities
-   collectively generate the shared random document containing the
-   commitments.
+   After all votes have been received or pulled in, an authority generate or
+   update its state containing the commitments.
 
-3.1.2. Shared Random Document During Commitment Phase [SRDOCCOMMIT]
+3.1.2. Persistent State During Commitment Phase [STATECOMMIT]
 
-   During the commitment phase, the shared random document contains:
+   During the commitment phase, an authority state contains:
 
     - The commitments received by the majority of authorities
     - The two previous shared random values produced by the protocol (if any).
 
-   A commitment should only be transcribed to the shared random document if
-   and only if the majority of the voting authorities agreed that a particular
-   commitment was sent by a particular authority. Appendix section
-   [COMMITEXAMPLE] contains an example of this procedure.
+   A commitment should only be transcribed to the state if and only if the
+   majority of the voting authorities agreed that a particular commitment was
+   sent by a particular authority. Appendix section [COMMITEXAMPLE] contains
+   an example of this procedure.
 
    The commit phase lasts for 12 hours, so authorities have multiple chances
    to commit their values. An authority can commit a second value during a
    subsequent round of the commit phase, but only the last value should be
-   transcribed to the shared random document and only if it has been seen by
-   the majority.
+   transcribed to its persistent state and only if it has been seen by the
+   majority.
 
    Also, an authority should not be able to register a commitment value for a
    different authority. Hence, an authority X should only vote and place in
-   the SR doc commitments by authority Y, iff authority Y included that
+   its state commitments by authority Y, iff authority Y included that
    commitment in its vote.
 
 3.1.3. First & Last Round Of Commitment Phase [FIRSTLASTROUND]
@@ -214,7 +199,7 @@ Status: Draft
    of the commitments of the other authorities. For this reason, it's unlikely
    that a majority opinion of commitments will be created at 12:00UTC. Instead
    authorities are expected to form a majority opinion and transcribe
-   commitments to the SR doc during the voting period of 13:00UTC or at least
+   commitments to their state during the voting period of 13:00UTC or at least
    until the reveal phase.
 
    Similarly, an authority will not be able to commit to a new value during
@@ -241,27 +226,24 @@ Status: Draft
    The set of commitments have been established during the commitment phase
    and must remain the same. If an authority tries to change its commitment
    during the reveal phase or introduce a new commitment, the entire vote MUST
-   be ignored for the purposes of this system. To do so, authorities during
+   be ignored for the purposes of this protocol. To do so, authorities during
    the first reveal round MUST check that received votes contain the same
-   commitments as the last SR document of the commitment phase. In subsequent
-   reveal rounds, authorities check the previous hour SR document for
-   commitment validation.
+   commitments as the ones in their state built during the last commitment
+   phase. If a commitment value of an other authority is NOT in their state,
+   they should ignore the reveal value from that authority.
 
-   After all votes have been received, authorities generate the shared random
-   document along with the consensus.
+3.2.2. Persistent State During Reveal Phase [STATEREVEAL]
 
-3.2.2. Shared Random Document During Reveal Phase [SRDOCREVEAL]
-
-   During the reveal phase, the shared random document contains:
+   During the reveal phase, the state contains:
 
     - The commitments agreed on during the commitment phase.
     - The corresponding reveal values from the majority of authorities.
     - The two previous shared random values produced by this system (if any).
 
    Similar to the commitment phase, authorities transcribe reveal values to
-   the shared random document if and only if the majority of the voting
-   authorities have voted on that particular reveal value. An example of this
-   can be seen in section [REVEALEXAMPLE].
+   their state if and only if the majority of the voting authorities have
+   voted on that particular reveal value. An example of this can be seen in
+   section [REVEALEXAMPLE].
 
    Section [FIRSTLASTROUND] also applies for the reveal phase. This means that
    Tor authorities SHOULD NOT reveal new values during the last round of the
@@ -274,7 +256,7 @@ Status: Draft
    clients can use it.
 
    Authorities calculate the shared random value using the reveal values in
-   the latest shared random document as specified in subsection [SRCALC].
+   their state as specified in subsection [SRCALC].
 
    If the shared random value contains reveal contributions by less than 3
    directory authorities, it MUST NOT be created. Instead, the old shared
@@ -282,27 +264,36 @@ Status: Draft
 
    Authorities at 12:00UTC start including this new shared random value in
    their votes, replacing the one from two protocol runs ago. Authorities also
-   start including this new shared random value in the SR document and in the
-   microdescriptor consensus as well.
+   start including this new shared random value in the microdescriptor
+   consensus as well.
 
    Apart from that, authorities proceed voting normally as they would in the
    first round of the commitment phase (section [COMMITMENTPHASE]).
 
 3.3.1. Shared Randomness Calculation [SRCALC]
 
-   An authority that wants to derive the shared random value V, should use the
-   appropriate reveal values for that time period and calculate V as follows:
+   An authority that wants to derive the shared random value SRV, should use
+   the appropriate reveal values for that time period and calculate SRV as
+   follows.
 
-      V = H(ID_a | R_a | ID_b | R_b | ...)
+      HASHED_REVEALS = H(ID_a | R_a | ID_b | R_b | ..)
 
-   where the ID_k value is the identity fingerprint of directory authority k
-   and R_k is its corresponding reveal value of that authority for the current
-   period. H is the sha256 for protocol version 1.
+      SRV = HMAC(HASHED_REVEALS,
+                "shared-random" | INT_8(reveal_num) | INT_8(version) |
+                previous_SR)
 
-   XXX Should the hashing here include more elements? Like the previous random
-       value for chaining? Or the current date? See how the NIST beacon does it
-       in case we can steal some additional RNG security properties:
-               http://hackaday.com/2014/12/19/nist-randomness-beacon/
+   where the ID_a value is the identity fingerprint of directory authority 'a'
+   and R_a is the corresponding reveal value of that authority for the current
+   period.
+
+   Also, "reveal_num" is the number of revealed values in this construction,
+   "version" is the protocol version number and "previous_SR" is the previous
+   shared random value if any.
+
+   To maintain consistent ordering, ID_a | R_a pairs are ordered based on the
+   identity fingerprint of the authority in ascending order.
+
+   For protocol version 1, H is SHA256 and HMAC is HMAC-SHA256.
 
 3.4. Bootstrapping Procedure
 
@@ -324,9 +315,9 @@ Status: Draft
    MUST be stored timestamped to avoid sending it on wrong protocol runs.
 
    For this reason, other authorities should carry the commitment values of
-   absent authorities in the shared randomness document until the end of the
-   protocol. The shared randomness document can be used to verify that the
-   commitment values are carried properly.
+   absent authorities in their persistent state until the end of the protocol.
+   It can then be used to verify that the commitment values are carried
+   properly.
 
    An authority that misses the Commitment Phase cannot commit anymore, so
    it's unable to participate in the protocol for that run. Same thing for an
@@ -344,17 +335,14 @@ Status: Draft
    The security of this proposal strongly relies on forming majority opinion
    so it's important for the number of participants to always be well defined:
 
-   In the voting session right before creating the SR doc, we define the
-   number of active participants to be the number of directory authorities
-   that included commit/reveal values in their votes.
+   In the voting session, we define the number of active participants to be
+   the number of directory authorities that included commit/reveal values in
+   their votes.
 
-   As specified in sections [SRDOCCOMMIT] and [SRDOCREVEAL], a commit/reveal
-   value should be transcribed to the SR doc if and only if the majority voted
-   for it. So for example, if there are 6 active participants, a commit value
-   will only be transcribed if 4 or more participants agreed on it.
-
-   Furthermore, as specified in section [SRDOC], the shared random document is
-   considered valid only if it is signed by 50% + 1 authorities.
+   As specified in sections [STATECOMMIT] and [STATEREVEAL], a commit/reveal
+   value should be transcribed to the an authority state iff the majority
+   voted for it. So for example, if there are 6 active participants, a commit
+   value will only be transcribed if 4 or more participants agreed on it.
 
    XXX The number of active participants is dynamic as authorities leave and
        join the protocol. Since the number of active participants is dynamic ,
@@ -398,7 +386,7 @@ Status: Draft
 
    During the Reveal Phase, an authority can also optionally reveal the value
    REVEAL. The "algname" is the hash algorithm that should be used to compute
-   COMMIT and REVEAL if any. It should be "sha256" for this version.
+   COMMIT and REVEAL if any. It should be "sha256" for version 1.
 
    The commitment value COMMIT is constructed as follows:
 
@@ -409,13 +397,15 @@ Status: Draft
    An authority puts in its vote the commitments and reveals it has seen from
    the other authorities. To do so, it includes the following in its votes:
 
-      "shared-rand-received-commitment" SP identity SP algname SP COMMIT [SP REVEAL] NL
+      "shared-rand-received-commitment" SP identity SP algname SP
+                                           COMMIT [SP REVEAL] NL
 
-   when "identity" is the hex-encoded commitment's authority fingerprint and
+   where "identity" is the hex-encoded commitment's authority fingerprint and
    COMMIT is the received commitment value. Authorities can also optionally
    include the reveal value REVEAL. There MUST be only one line per authority
    else the vote is considered invalid. Finally, the "algname" is the hash
-   algorithm that should be used to compute COMMIT and REVEAL if any.
+   algorithm that should be used to compute COMMIT and REVEAL which is
+   "sha256" for version 1.
 
 4.1.3. Shared Random value
 
@@ -431,57 +421,45 @@ Status: Draft
   To maintain consistent ordering, the shared random values of the previous
   period should be listed before the values of the current period.
 
-4.2. Shared Random Document
+4.2. Persistent State of an Authority
 
-   As a way to keep ground truth state in this protocol, we introduce a new
-   consensus flavor document. We call it the "Shared Random Document". This
-   document is only used by directory authorities.
+   As a way to keep ground truth state in this protocol, an authority MUST
+   keep a persistent state of the protocol.
 
-   This new consensus flavor should be signed with the sha256 signature format
-   as documented in proposal 162.
+4.2.1 Format [STATEFORMAT]
 
-4.2.1 Format [SRFORMAT]
-
-   This document has a very strict format because authorities need to generate
-   the exact same document.
-
-   It contains a preamble, a commitment and reveal section, a list of shared
-   random values and finally a footer.
+   It contains a preamble, a commitment and reveal section and a list of
+   shared random values.
 
    The preamble (or header) contains the following items. They MUST occur in
    the order given here:
 
-    "shared-random-version" SP version SP flavor NL
+    "shared-random-version" SP version NL
 
         [At start, exactly once.]
 
-        A document format version. For this specification, version is "1". The
-        flavor is always "shared-random".
-
-    "created" SP YYYY-MM-DD SP HH:MM:SS NL
-
-        [Exactly once]
-
-        The creation time of this document.
+        A document format version. For this specification, version is "1".
 
     "valid-until" SP YYYY-MM-DD SP HH:MM:SS NL
 
         [Exactly once]
 
-        After this time, this document is invalid and shouldn't be used nor
-        trusted. The validity time period is 3 hours.
+        After this time, this state is expired and shouldn't be used nor
+        trusted. The validity time period is till the end of the current
+        protocol run (the upcoming noon).
 
     "protocol-phase" SP phase NL
 
         [Exactly once]
 
-        The current protocol phase when this document is generated. The accepted
-        values are: "commitment" and "reveal".
+        The current protocol phase when this document is generated. The
+        accepted values are: "commitment" and "reveal".
 
    The following details the commitment and reveal section.
 
-     "shared-rand-commitment" SP algname SP identity SP commitment-value
-                              [SP revealed-value] NL
+     "shared-rand-commitment" SP algname SP identity SP
+                              YYYY-MM-DD SP HH:MM:SS SP
+                              commitment-value [SP revealed-value] NL
 
         [Exactly once per authority]
 
@@ -492,7 +470,7 @@ Status: Draft
         Finally, "{commitment|revealed}-value" is the value as specified in
         section [SPEC].
 
-   Next is the shared random value section.
+   Finally is the shared random value section.
 
      "shared-rand-previous-value" SP value NL
 
@@ -507,31 +485,6 @@ Status: Draft
 
         This is the latest shared random value. The "value" is defined in
         section [SRCALC].
-
-   Finally, the footer of the document:
-
-     "shared-random-footer" NL
-
-        [Exactly once]
-
-        It contains one subsection, the authority signatures.
-
-           "authority-signature" SP algname SP identity SP signing-key-digest
-                                 NL Signature NL
-
-              [Exactly once per authority]
-
-              The "identity" is the hex-encoded digest of the authority
-              identity key and the "signing-key-digest" is the hex-encoded
-              digest of the current authority signing key of the signing
-              authority.
-
-              The "algname" item is the algorithm used to compute the hash of
-              the document before signing it. As proposal 162 proposed,
-              "sha256" should be used. The authority-signature entry MUST be
-              ignored if "algname" is unrecognized.
-
-              See dir-spec.txt for a specification for the Signature item.
 
 4.3. Shared Random Value in Consensus [SRCONSENSUS]
 
@@ -564,12 +517,12 @@ Status: Draft
    its value to half of the authorities. That would partition the authorities
    into two sets: the ones who think that the shared random value should
    contain this new reveal, and the rest who don't know about it. This would
-   result in a tie and two different SR docs.
+   result in a tie and two different shared random value.
 
    However, we believe that an agreement phase is not necessary in our
-   protocol since reveal values are transcribed in the SR document if only if
-   the majority agrees. Hence, a tie is not enough to confuse the authorities
-   since it's not majority and the offending value would just be discarded.
+   protocol since reveal values are choosen if only if the majority agrees.
+   Hence, a tie is not enough to confuse the authorities since it's not
+   majority and the offending value would just be discarded.
 
    That said, an attack that could still work here would be if an authority
    can make half of the authorities believe that the value should be
@@ -589,8 +542,8 @@ Status: Draft
    it's generated.
 
    This does not pose a problem for the HSDir hash ring, since we impose an
-   uptime restriction on HSDir nodes, so 12 hours predictability is not an
-   issue.
+   higher uptime restriction on HSDir nodes, so 12 hours predictability is not
+   an issue.
 
    Any other protocols using the shared random value from this system should
    be aware of this property.
@@ -623,9 +576,9 @@ Status: Draft
 
 6.3. Why can't we recover if we fail to do a consensus at 12:00UTC?
 
-   Section [SRDISASTER] specifies that if the 12:00UTC consensus or SR doc
-   fails to be created, we fall back to the random value of the previous day
-   meaning authorities will carry the last valid SR values from the previous
+   Section [SRDISASTER] specifies that if the 12:00UTC SR value fails to be
+   created, we fall back to the random value of the previous day meaning
+   authorities will carry the last valid SR values from the previous
    microdescriptor consensus to the new one.
 
    Theoretically, we could recover by calculating the shared randomness of the
@@ -654,18 +607,16 @@ Status: Draft
     | A_6 -> 33  | A_6 -> 33  | A_6 -> 33   | A_6 -> 33   |  A_6 -> 33  | BLANK     |
     +------------+------------+-------------+-------------+-------------+-----------+
 
-    In this case, following the majority rule, the final SR doc will contain:
+    In this case, following the majority rule, the final values used are:
 
-                         +-------------+
-                         | SR Document |
-                         +-------------+
-                         | A_1 -> 7    |
-                         | A_2 -> 42   |
-                         | A_3 -> 16   |
-                         | A_4 -> 22   |
-                         | A_5 -> 9    |
-                         | A_6 -> 33   |
-                         +-------------+
+                                     +-------------+
+                                     | A_1 -> 7    |
+                                     | A_2 -> 42   |
+                                     | A_3 -> 16   |
+                                     | A_4 -> 22   |
+                                     | A_5 -> 9    |
+                                     | A_6 -> 33   |
+                                     +-------------+
 
 7.2. Example reveal phase [REVEALEXAMPLE]
 
@@ -697,15 +648,13 @@ Status: Draft
    should also be ignored since it was only seen by half of the auths (3/6)
    which is not majority (it would require at least 4/6 votes).
 
-   Hence, the final shared random document should contain:
+   Hence, the final values that must be used are:
 
-                         +-------------+
-                         | SR Document |
-                         +-------------+
-                         | A_1 -> 444  |
-                         | A_2 -> 110  |
-                         | A_3 -> 420  |
-                         | BLANK       |
-                         | A_5 -> 555  |
-                         | BLANK       |
-                         +-------------+
+                                     +-------------+
+                                     | A_1 -> 444  |
+                                     | A_2 -> 110  |
+                                     | A_3 -> 420  |
+                                     | BLANK       |
+                                     | A_5 -> 555  |
+                                     | BLANK       |
+                                     +-------------+
