@@ -184,11 +184,9 @@ Status: Draft
    sent by a particular authority. Appendix section [COMMITEXAMPLE] contains
    an example of this procedure.
 
-   The commit phase lasts for 12 hours, so authorities have multiple chances
-   to commit their values. An authority can NOT commit a second value during a
-   subsequent round of the commit phase for which it triggers authorities to
-   add a conflict line to their vote and it will be ignored for the rest of
-   the protocol.
+   The commit phase lasts for 12 hours, so authorities have multiple chances to
+   commit their values. An authority MUST NOT commit a second value during a
+   subsequent round of the commit phase (see [COMMITCONFLICT]).
 
    It's important that an evil authority is not allowed to register a commitment
    value and assign it to another authority. Hence, an authority X should only
@@ -433,7 +431,7 @@ Status: Draft
   To maintain consistent ordering, the shared random values of the previous
   period should be listed before the values of the current period.
 
-4.1.4. Conflict
+4.1.4. Conflict [COMMITCONFLICT]
 
    If an authority sees two distinct commitments from an other authority in
    the same period, the authority is broken or evil: you include both, thereby
@@ -451,10 +449,10 @@ Status: Draft
    The point of this line is to notify that a conflict happened and not list
    them all.
 
-   When a conflict line is seen in a vote, an authority should verify the
-   commit values that they are in fact coming from the authority identified by
+   When a conflict line is seen in a vote, an authority should verify the commit
+   values that they are in fact coming from the authority identified by
    "identity" and ignore any commitments from that authority until the next
-   round of the protocol.
+   protocol run.
 
 4.2. Persistent State
 
