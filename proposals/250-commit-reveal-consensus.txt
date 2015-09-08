@@ -439,10 +439,15 @@ Supersedes: 225
    "commit2" is the new received commit of the same period. Both commit values
    are constructed as specified in section [COMMITENCODING].
 
-   XXX: What if an authority votes then reboots without saving its commitment
-        value on disk and then comes back online and votes again. Is this a
-        valid possible use case for an authority? If so, we could have a
-        conflict that is actually a valid use case. [dgoulet]
+   It is possible for an authority to vote multiple times in the same voting
+   period so only the latest commitment conflict should be added to the vote.
+   The point of this line is to notify that a conflict happened and not list
+   them all.
+
+   When a conflict line is seen in a vote, an authority should verify the
+   commit values that they are in fact coming from the authority identified by
+   "identity" and ignore any commitments from that authority until the next
+   round of the protocol.
 
 4.2. Persistent State
 
