@@ -105,6 +105,9 @@ Supersedes: 225
       (b) The shared random value of the previous time period. This is the
           same shared random value that was included in the votes.
 
+   For this, a new consensus-method is needed indicating which authority
+   participates in the protocol.
+
 2.4. Persistent State of the Protocol [STATE]
 
    A directory authority needs to keep a persistent state on disk of the on
@@ -166,8 +169,12 @@ Supersedes: 225
     - Any commitments received from other authorities.
     - The two previous shared random values produced by the protocol (if any).
 
-   After all votes have been received or pulled in, an authority generate or
-   update its state containing the commitments.
+   After all votes have been received or pulled in, an authority generates or
+   updates its state containing the commitments.
+
+   Commitment values that are received in votes from other authorities are
+   saved to the persistent state and only put in the vote at the next
+   commitment phase.
 
 3.1.2. Persistent State During Commitment Phase [STATECOMMIT]
 
@@ -231,6 +238,9 @@ Supersedes: 225
    commitments as the ones in their state built during the last commitment
    phase. If a commitment value of an other authority is NOT in their state,
    they should ignore the reveal value from that authority.
+
+   Reveal values that are received in votes from other authorities are saved
+   to the persistent state and only put in the vote at the next reveal phase.
 
 3.2.2. Persistent State During Reveal Phase [STATEREVEAL]
 
