@@ -367,7 +367,7 @@ Status: Draft
 
        SRV = HMAC(previous_SR, "shared-random-disaster")
 
-   where previous_SR is the previous shared random value.
+   where "previous_SR" is the previous shared random value.
 
    Clients should keep on using this shared random values.
 
@@ -412,7 +412,7 @@ Status: Draft
    algorithm that should be used to compute COMMIT and REVEAL which is
    "sha256" for version 1.
 
-4.1.3. Shared Random value
+4.1.3. Shared Random Value [SRVOTE]
 
   Authorities include a shared random value in their votes using the following
   encoding for the previous and current value respectively:
@@ -425,8 +425,8 @@ Status: Draft
 
   "status" denotes how fresh the value is. If that value was produced as
   specified in section [SRCALC] then status is "fresh". If the value was
-  produced from a failed protocol run (as specified in [SRDISASTER]) then status
-  is "non-fresh".
+  produced from a failed protocol run (as specified in [SRDISASTER]) then
+  status is "non-fresh".
 
   To maintain consistent ordering, the shared random values of the previous
   period should be listed before the values of the current period.
@@ -449,8 +449,8 @@ Status: Draft
    The point of this line is to notify that a conflict happened and not list
    them all.
 
-   When a conflict line is seen in a vote, an authority should verify the commit
-   values that they are in fact coming from the authority identified by
+   When a conflict line is seen in a vote, an authority should verify the
+   commit values that they are in fact coming from the authority identified by
    "identity" and ignore any commitments from that authority until the next
    protocol run.
 
