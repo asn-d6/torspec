@@ -154,11 +154,8 @@ Status: Draft
 
    The commit phase lasts from 12:00UTC to 00:00UTC.
 
-   During this phase, an authority can commit as many values as it want
-   replacing the previous one, if any, thus ending up with only one single
-   commit value at the end of the phase. Although, in theory an authority
-   shouldn't do that, this is to support reboot or downtime during the phase
-   of an authority.
+   During this phase, an authority commits a value in its vote and saves it to
+   its state as well.
 
 3.1.1. Voting During Commitment Phase
 
@@ -188,10 +185,10 @@ Status: Draft
    an example of this procedure.
 
    The commit phase lasts for 12 hours, so authorities have multiple chances
-   to commit their values. An authority can commit a second value during a
-   subsequent round of the commit phase, but only the last value should be
-   transcribed to its persistent state and only if it has been seen by the
-   majority.
+   to commit their values. An authority can NOT commit a second value during a
+   subsequent round of the commit phase for which it triggers authorities to
+   add a conflict line to their vote and it will be ignored for the rest of
+   the protocol.
 
    Also, an authority should not be able to register a commitment value for a
    different authority. Hence, an authority X should only vote and place in
@@ -494,6 +491,8 @@ Status: Draft
         identity key of the signing authority from which the values are from.
         Finally, "{commitment|revealed}-value" is the value as specified in
         section [SPEC].
+
+        This line is also used by an authority to store its own value.
 
    Finally is the shared random value section.
 
