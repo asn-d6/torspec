@@ -190,10 +190,10 @@ Status: Draft
    add a conflict line to their vote and it will be ignored for the rest of
    the protocol.
 
-   Also, an authority should not be able to register a commitment value for a
-   different authority. Hence, an authority X should only vote and place in
-   its state commitments by authority Y, iff authority Y included that
-   commitment in its vote.
+   It's important that an evil authority is not allowed to register a commitment
+   value and assign it to another authority. Hence, an authority X should only
+   vote for commitments by authority Y, iff authority Y included that commitment
+   in its previous vote.
 
 3.1.3. First & Last Round Of Commitment Phase [FIRSTLASTROUND]
 
@@ -339,9 +339,9 @@ Status: Draft
    The security of this proposal strongly relies on forming majority opinion
    so it's important for the number of participants to always be well defined:
 
-   In the voting session, we define the number of active participants to be
-   the number of directory authorities that included commit/reveal values in
-   their votes.
+   In each voting session we define the number of active participants to be the
+   number of directory authorities that included their *own* commit/reveal
+   values in their votes.
 
    As specified in sections [STATECOMMIT] and [STATEREVEAL], a commit/reveal
    value should be transcribed to the an authority state iff the majority
@@ -360,13 +360,16 @@ Status: Draft
 
 3.7. Shared Randomness Disaster Recovery [SRDISASTER]
 
-   If the consensus at 12:00UTC fails to be created, then there will be no new
+   If the consensus at 12:00UTC fails to be created, then there will be no fresh
    shared random value for the day.
 
-   Directory authorities should keep including the previous shared random
-   values in the consensus till the next 12:00UTC commit-and-reveal session.
-   The time period needs to be updated to reflect the current time period even
-   if the random value stays the same.
+   In this case, and assuming there is a previous shared random value, directory
+   authorities should use the following construction as the shared random value
+   of the day:
+
+       SRV = HMAC(previous_SR, "shared-random-disaster")
+
+   where previous_SR is the previous shared random value.
 
    Clients should keep on using this shared random values.
 
@@ -394,7 +397,7 @@ Status: Draft
 
    The commitment value COMMIT is constructed as follows:
 
-      C = base64-encode( SHA256(REVEAL) )
+      COMMIT = base64-encode( SHA256(REVEAL) )
 
 4.1.2 Encoding commit/reveal values received by other authorities [COMMITOTHER]
 
@@ -416,11 +419,16 @@ Status: Draft
   Authorities include a shared random value in their votes using the following
   encoding for the previous and current value respectively:
 
-     "shared-rand-previous-value" SP value NL
-     "shared-rand-current-value" SP value NL
+     "shared-rand-previous-value" SP status SP value NL
+     "shared-rand-current-value" SP status SP value NL
 
-  where "value" is the actual shared random value. It's computed as specified
-  in the section [SRCALC].
+  where "value" is the actual shared random value. It's normally computed as
+  specified in the section [SRCALC].
+
+  "status" denotes how fresh the value is. If that value was produced as
+  specified in section [SRCALC] then status is "fresh". If the value was
+  produced from a failed protocol run (as specified in [SRDISASTER]) then status
+  is "non-fresh".
 
   To maintain consistent ordering, the shared random values of the previous
   period should be listed before the values of the current period.
@@ -501,19 +509,19 @@ Status: Draft
 
    Finally is the shared random value section.
 
-     "shared-rand-previous-value" SP value NL
+     "shared-rand-previous-value" SP status SP value NL
 
         [At most once]
 
         This is the previous shared random value agreed on at the previous
-        period. The "value" is defined in section [SRCALC].
+        period. The fields are the same as in section [SRVOTE].
 
-     "shared-rand-current-value" SP value NL
+     "shared-rand-current-value" SP status SP value NL
 
         [At most once]
 
-        This is the latest shared random value. The "value" is defined in
-        section [SRCALC].
+        This is the latest shared random value. The fields are the same as in
+        section [SRVOTE].
 
 4.3. Shared Random Value in Consensus [SRCONSENSUS]
 
@@ -605,10 +613,10 @@ Status: Draft
 
 6.3. Why can't we recover if we fail to do a consensus at 12:00UTC?
 
-   Section [SRDISASTER] specifies that if the 12:00UTC SR value fails to be
-   created, we fall back to the random value of the previous day meaning
-   authorities will carry the last valid SR values from the previous consensus
-   to the new one.
+   Section [SRDISASTER] specifies that if the 12:00UTC consensus fails to be
+   created, we simply hash the random value of the previous day and use it as
+   the new shared random value. This changes the daily value but fails to make
+   it fresh, which is not optimal.
 
    Theoretically, we could recover by calculating the shared randomness of the
    day at 13:00UTC instead. However, adding such fallback logic would
