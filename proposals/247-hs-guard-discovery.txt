@@ -1,3 +1,47 @@
+XXX mike perry: guard buckets
+
+    Here's another crazy idea that would potentially bring this Vanguards idea
+    closer to "Virtual Circuits": What if you divided your third-level Vanguards
+    into NUM_SECOND_GUARDS isolated buckets, and mapped exactly one these
+    buckets to each of your second-level guards? Then, when making Rend Circs,
+    after you select a second-level hop for a given circuit, you can only extend
+    to the third-level guards that correspond to the bucket for that
+    second-level guard.
+
+    That way, if one third-level guard was compromised via a successful Sybil
+    attack, the adversary would learn at most 1 of your second-level guards,
+    instead of learning all of them and then getting to take their pick which
+    one(s) they want to try to compromise.
+
+    Does that make sense?
+
+XXX
+    My current thought is that the following is a better design than the one currently in the proposal:
+      1. One first guard
+      2. Two second guards per first guard (so two unless NumEntryGuards is changed)
+      3. One third guard per second guard (so two unless NumEntryGuards is changed)
+
+    This will only perform worse than the design suggested in the proposal
+    (which is one first guard, two second guards, and six third guards, with all
+    guards connected to all following guards). I think it might not much worse,
+    though.
+
+XXX Roger:
+
+    I haven't been keeping up with this thread well, so maybe that has already
+    been mentioned, but in case it hasn't: also consider the case where the Tor
+    client runs two hidden services, and so they share the same guard
+    infrastructure. In today's design, they each have one guard, but many Tor
+    clients have that one guard, so you can't conclude much from noticing it. In
+    last year's design, they each have the same three guards, which is a nearly
+    unique fingerprint. In the above design, where we have more third-level
+    guards, we're heading back into the unique fingerprint territory.
+
+
+
+
+
+
 Filename: 247-hs-guard-discovery.txt
 Title: Defending Against Guard Discovery Attacks using Vanguards
 Author: George Kadianakis
@@ -76,21 +120,16 @@ Status: Draft
   `second_guard_set` as the second hop of the circuit and nodes from
   `third_guard_set` as third hops of the circuit.
 
-  A hidden service rotates 'second_guard_set' every
-  SECOND_GUARD_ROTATION hours, and 'third_guard_set' every
-  THIRD_GUARD_ROTATION hours.
+  A hidden service rotates nodes from the 'second_guard_set' at a random time
+  between MIN_SECOND_GUARD_LIFETIME hours and MAX_SECOND_GUARD_LIFETIME hours.
 
-  These extra guard nodes should be picked with the same path
-  selection procedure that is used for regular guard nodes. Care
-  should be taken such that guard sets do not share any common
-  relays. XXX or simply that they are not used in the same circuit?
+  A hidden service rotates nodes from the 'third_guard_set' at a random time
+  between MIN_THIRD_GUARD_LIFETIME and MAX_THIRD_GUARD_LIFETIME hours.
 
-  XXX maybe pick the second and third layer guards from the set of
-      middle nodes but also enforce some kind of uptime requirement?
-      that should greatly help our load balancing.
+  These extra guard nodes should be picked with the same path selection
+  procedure that is used for regular middle nodes
 
-  XXX maybe we should also introduce consensus flags for the extra
-      guard layers? Vanguard?
+  XXX should we add an uptime requirement? maybe add a new relay flag? Vanguard?
 
   XXX how should proposal 241 ("Resisting guard-turnover attacks") be
       applied here?
@@ -98,7 +137,18 @@ Status: Draft
 2.1. Security parameters
 
   We set NUM_SECOND_GUARDS to 2 nodes and NUM_THIRD_GUARDS to 6 nodes.
-  We set SECOND_GUARD_ROTATION to 2 weeks and THIRD_GUARD_ROTATION to 1 day.
+
+  We set MIN_SECOND_GUARD_LIFETIME to 9 days, and MAX_SECOND_GUARD_LIFETIME to 14 days.
+  That's an average lifetime of about 12 days.
+
+  We set MIN_THIRD_GUARD_LIFETIME to 2 hours, and MAX_THIRD_GUARD_LIFETIME to 24 hours.
+  That's an average lifetime of about 13 hours.
+
+  XXX update sybil table with the above lifetimes!!!
+  XXX mike perry: make table for 4, 8, 12 hour rates. 1% adversary. 10% adversary.
+
+  XXX make all the above cosnensus parameters?
+
 
   See the discussion section for more analysis on these constants.
 
