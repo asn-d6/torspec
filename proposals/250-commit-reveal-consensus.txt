@@ -80,11 +80,11 @@ Status: Draft
    everyday at 12:00UTC. In the beginning of that time period, each authority
    generates a new random value and keeps it for the whole day.
 
-   The authority cryptographically hashes the random value and calls the
-   output its "commitment" value. The original random value is called the
-   "reveal value". Given a reveal value you can verify that it corresponds to
-   a given commitment value. However given a commitment value you cannot
-   derive the underlying reveal value.
+   The authority cryptographically signs a hash of the random value and calls
+   the output its "commitment" value. The original random value is called the
+   "reveal value". Given a reveal value you can verify that it corresponds to a
+   given commitment value. However given a commitment value you cannot derive
+   the underlying reveal value.
 
 2.3. Consensus [CONS]
 
@@ -381,23 +381,62 @@ Status: Draft
    authorities. Commits and reveals share the same line, but reveals are
    optional.
 
-4.1.1 Encoding the authority's own commit/reveal value [COMMITENCODING]
+4.1.1. Computing commitments and reveals [COMMITREVEAL]
 
-   An authority that wants to commit (or reveal) a value during a vote, should
-   generate a random 256-bit value REVEAL, and include its commitment COMMIT
-   in its 12:00UTC vote as follows:
+   A directory authority that wants to participate in this protocol needs to
+   create a new pair of commitment/reveal values for every protocol
+   run. Authorities SHOULD generate a fresh pair of such values right before the
+   first commitment phase of the day (at 12:00UTC).
+
+   The procedure is as follows:
+       1. Authority generates a fresh 256-bit random value RN.
+       2. Authority uses RN to derive REVEAL (see below).
+       3. Authority uses REVEAL to derive COMMIT (see below).
+
+   The value REVEAL is computed as follows:
+
+      REVEAL = base64-encode( TIMESTAMP || RN )
+
+      where TIMESTAMP is a big-endian unsigned integer number of seconds since
+      the Unix epoch. RN is the 256-bit random value RN.
+
+   The value COMMIT is computed as follows:
+
+      SIGNATURE = ed25519-sign( privkey=PRIVKEY, msg=H(REVEAL) )
+      COMMIT = base64-encode( SIGNATURE )
+
+      where PRIVKEY is the identity key of the authority that is used to sign
+      the vote documents.
+
+4.1.2. Validating commitments and reveals [VALIDATECOMMIT]
+
+   When receiving a REVEAL value, authorities should first check that the
+   TIMESTAMP field corresponds to the current protocol run.
+
+   If you had a COMMIT value and you later receive its REVEAL value, it should
+   be possible to verify that they indeed correspond.
+
+   That can be done as follows:
+
+      HASHED_REVEAL = H(REVEAL)
+      COMMIT_SIG = base64-decode(COMMIT)
+      return ed25519-verify( pubkey=PUBKEY, sig=COMMIT_SIG, msg=HASHED_REVEAL)
+
+   Authorities should ignore reveal values during the Reveal Phase that don't
+   correspond to commit values published during the Commitment Phase.
+
+4.1.3. Encoding the authority's own commit/reveal value
+
+   The commitment value COMMIT (as computed in [COMMITREVEAL]) should be included
+   on votes as follows:
 
       "shared-rand-commitment" SP algname SP COMMIT [SP REVEAL] NL
 
-   During the Reveal Phase, an authority can also optionally reveal the value
-   REVEAL. The "algname" is the hash algorithm that should be used to compute
-   COMMIT and REVEAL if any. It should be "sha256" for version 1.
+   During the Reveal Phase, an authority can also optionally publish its reveal
+   value REVEAL. The "algname" is the hash algorithm that should be used to
+   compute COMMIT and REVEAL if any. It should be "sha256" for version 1.
 
-   The commitment value COMMIT is constructed as follows:
-
-      COMMIT = base64-encode( SHA256(REVEAL) )
-
-4.1.2 Encoding commit/reveal values received by other authorities [COMMITOTHER]
+4.1.4. Encoding commit/reveal values received by other authorities [COMMITOTHER]
 
    An authority puts in its vote the commitments and reveals it has seen from
    the other authorities. To do so, it includes the following in its votes:
@@ -412,7 +451,7 @@ Status: Draft
    algorithm that should be used to compute COMMIT and REVEAL which is
    "sha256" for version 1.
 
-4.1.3. Shared Random Value [SRVOTE]
+4.1.5. Shared Random Value [SRVOTE]
 
   Authorities include a shared random value in their votes using the following
   encoding for the previous and current value respectively:
@@ -431,7 +470,7 @@ Status: Draft
   To maintain consistent ordering, the shared random values of the previous
   period should be listed before the values of the current period.
 
-4.1.4. Conflict [COMMITCONFLICT]
+4.1.6. Conflict [COMMITCONFLICT]
 
    If an authority sees two distinct commitments from an other authority in
    the same period, the authority is broken or evil: you include both, thereby
@@ -442,7 +481,7 @@ Status: Draft
    where "identity" is the hex-encoded commitment's authority fingerprint.
    "commit1" is the previous commit that the authority had in its state and
    "commit2" is the new received commit of the same period. Both commit values
-   are constructed as specified in section [COMMITENCODING].
+   are constructed as specified in section [COMMITREVEAL].
 
    It is possible for an authority to vote multiple times in the same voting
    period so only the latest commitment conflict should be added to the vote.
