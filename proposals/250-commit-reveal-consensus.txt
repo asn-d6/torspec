@@ -155,7 +155,8 @@ Status: Draft
    The commit phase lasts from 12:00UTC to 00:00UTC.
 
    During this phase, an authority commits a value in its vote and saves it to
-   its state as well.
+   its state as well. After that, authorities will decide using the majority
+   which commitments should be kept for the reveal phase.
 
 3.1.1. Voting During Commitment Phase
 
@@ -169,8 +170,15 @@ Status: Draft
    updates its state containing the commitments.
 
    Commitment values that are received in votes from other authorities are
-   saved to the persistent state and only put in the vote at the next
-   commitment phase.
+   saved to the persistent state. If they are seen for the first time, they
+   are only put in the vote at the next voting period. The reason for this is
+   to mitigate a last hour partition attack where an attacker commits a value
+   to half of the authority and a different one to the other half which
+   utlimately can end up in creating two consensuses with two different share
+   random values.
+
+   The logic here is to only use a value that the others know you have
+   received. The exact same applies for the reveal values in the reveal phase.
 
 3.1.2. Persistent State During Commitment Phase [STATECOMMIT]
 
@@ -224,17 +232,20 @@ Status: Draft
     - All the commitments and reveals received from other authorities.
     - The two previous shared random values produced by the protocol (if any).
 
-   The set of commitments have been established during the commitment phase
-   and must remain the same. If an authority tries to change its commitment
-   during the reveal phase or introduce a new commitment, the entire vote MUST
-   be ignored for the purposes of this protocol. To do so, authorities during
-   the first reveal round MUST check that received votes contain the same
-   commitments as the ones in their state built during the last commitment
-   phase. If a commitment value of an other authority is NOT in their state,
-   they should ignore the reveal value from that authority.
+   The set of commitments have been decided during the commitment phase and
+   must remain the same. If an authority tries to change its commitment during
+   the reveal phase or introduce a new commitment, it should be flagged as a
+   conflict (see [COMMITCONFLICT]) and the authority should be ignored until
+   the next protocol run.
+
+   Authorities during the first reveal round MUST check that received votes
+   contain the same commitments as the ones in their state built during the
+   last commitment phase. If a commitment value of an other authority is NOT
+   in their state, they should ignore the reveal value from that authority.
 
    Reveal values that are received in votes from other authorities are saved
-   to the persistent state and only put in the vote at the next reveal phase.
+   to the persistent state and only put in the vote at the next reveal phase
+   if they have been seen for the first time.
 
 3.2.2. Persistent State During Reveal Phase [STATEREVEAL]
 
@@ -244,10 +255,16 @@ Status: Draft
     - The corresponding reveal values from the majority of authorities.
     - The two previous shared random values produced by this system (if any).
 
-   Similar to the commitment phase, authorities transcribe reveal values to
-   their state if and only if the majority of the voting authorities have
-   voted on that particular reveal value. An example of this can be seen in
-   section [REVEALEXAMPLE].
+   Reveal values don't need a majority. Commit can be verified and are decided
+   by the majority so once an authority sees a reveal value for the first
+   time, to use it, it should verify it and make sure the timestamp matches
+   the commitment phase. Else, the reveal value MUST be ignored.
+
+   This is an important property that helps mitigate a partition attack where
+   an attacker sends its reveal value to half of the authority thus leaving
+   half without it. With the broadcast of the reveal values in the votes, the
+   other half can learn the value after a while without the need of the
+   majority hence breaking the partition.
 
    Section [FIRSTLASTROUND] also applies for the reveal phase. This means that
    Tor authorities SHOULD NOT reveal new values during the last round of the
@@ -397,16 +414,16 @@ Status: Draft
 
       REVEAL = base64-encode( TIMESTAMP || RN )
 
-      where TIMESTAMP is a big-endian unsigned integer number of seconds since
-      the Unix epoch. RN is the 256-bit random value RN.
+      where TIMESTAMP is a big-endian unsigned 64 bit integer being the number
+      of seconds since the Unix epoch. RN is the 256-bit random value RN.
 
    The value COMMIT is computed as follows:
 
-      SIGNATURE = ed25519-sign( privkey=PRIVKEY, msg=H(REVEAL) )
-      COMMIT = base64-encode( SIGNATURE )
+      SIGNATURE = ed25519-sign( privkey=PRIVKEY, msg=H(REVEAL) || TIMESTAMP )
+      COMMIT = base64-encode( TIMESTAMP || SIGNATURE )
 
       where PRIVKEY is the identity key of the authority that is used to sign
-      the vote documents.
+      the vote documents. H is the hashing algorithm "sha256".
 
 4.1.2. Validating commitments and reveals [VALIDATECOMMIT]
 
@@ -418,9 +435,17 @@ Status: Draft
 
    That can be done as follows:
 
-      HASHED_REVEAL = H(REVEAL)
-      COMMIT_SIG = base64-decode(COMMIT)
-      return ed25519-verify( pubkey=PUBKEY, sig=COMMIT_SIG, msg=HASHED_REVEAL)
+      TIMESTAMP_R || RN = base64-decode(REVEAL)
+      TIMESTAMP_C || COMMIT_SIG = base64-decode(COMMIT)
+
+      return ed25519-verify( pubkey=PUBKEY, sig=COMMIT_SIG,
+                             msg=H(RN) || TIMESTAMP )
+
+      where PUBKEY is the identity public key of the authority revealing its
+      value. H is the hashing algorithm "sha256".
+
+      TIMESTAMP_R must be equal to TIMESTAMP_C else REVEAL is an invalid value
+      for COMMIT.
 
    Authorities should ignore reveal values during the Reveal Phase that don't
    correspond to commit values published during the Commitment Phase.
@@ -472,9 +497,9 @@ Status: Draft
 
 4.1.6. Conflict [COMMITCONFLICT]
 
-   If an authority sees two distinct commitments from an other authority in
-   the same period, the authority is broken or evil: you include both, thereby
-   proving there is a conflict:
+   If an authority sees two distinct commitments from an other authority, that
+   authority is broken or evil: you include both commits, thereby proving
+   there is a conflict:
 
       "shared-rand-conflict" SP identity SP commit1 SP commit2 NL
 
@@ -483,15 +508,21 @@ Status: Draft
    "commit2" is the new received commit of the same period. Both commit values
    are constructed as specified in section [COMMITREVEAL].
 
+   A conflict can occur if:
+      - An authority sends two different values during the commitment phase.
+      - An authority sends a new commit value during the reveal phase.
+      - A commit value seen by other authorities that doesn't match the value
+        in the authority's persistent state.
+
    It is possible for an authority to vote multiple times in the same voting
    period so only the latest commitment conflict should be added to the vote.
    The point of this line is to notify that a conflict happened and not list
    them all.
 
    When a conflict line is seen in a vote, an authority should verify the
-   commit values that they are in fact coming from the authority identified by
-   "identity" and ignore any commitments from that authority until the next
-   protocol run.
+   commit values (see [VALIDATECOMMIT]) that they are in fact coming from the
+   authority identified by "identity" and if so, ignore that authority until
+   the next protocol run. If the conflict line is invalid, ignore it.
 
 4.2. Persistent State
 
@@ -719,8 +750,10 @@ Status: Draft
 
    Following the rules of the reveal phase, the reveal of A_4 should be
    ignored since it was not voted by > 3 authorities. The reveal from A_6
-   should also be ignored since it was only seen by half of the auths (3/6)
-   which is not majority (it would require at least 4/6 votes).
+   should be broadcasted by A_1, A_2 and A_3 during the reveal phase thus
+   making the rest of the authorities see it at some point. Remember that for
+   a reveal to be used by an authority, no majority is needed, it just need to
+   be verified and used if the commit value was choosen by the majority.
 
    Hence, the final values that must be used are:
 
@@ -730,5 +763,5 @@ Status: Draft
                                      | A_3 -> 420  |
                                      | BLANK       |
                                      | A_5 -> 555  |
-                                     | BLANK       |
+                                     | A_6 -> 123  |
                                      +-------------+
