@@ -420,20 +420,21 @@ Status: Draft
    The value COMMIT is computed as follows:
 
       SIGNATURE = ed25519-sign( privkey=PRIVKEY, msg=H(REVEAL) || TIMESTAMP )
-      COMMIT = base64-encode( TIMESTAMP || SIGNATURE )
+      COMMIT = base64-encode( TIMESTAMP || H(REVEAL) || SIGNATURE )
 
       where PRIVKEY is the identity key of the authority that is used to sign
-      the vote documents. H is the hashing algorithm "sha256".
+      the vote documents. TIMESTAMP is the same as the one used for REVEAL.
+      H is the hashing algorithm "sha256".
 
 4.1.2. Validating commitments and reveals [VALIDATECOMMIT]
 
-   When receiving a REVEAL value, authorities should first check that the
-   TIMESTAMP field corresponds to the current protocol run.
+   When authorities receive a COMMIT value, they need to verify the signature
+   and ensure that the TIMESTAMP field corresponds ot the current protocol run.
+   The same timestamp check should be done on REVEAL values. If an outdated
+   COMMIT or REVEAL value is found, it should be ignored.
 
-   If you had a COMMIT value and you later receive its REVEAL value, it should
-   be possible to verify that they indeed correspond.
-
-   That can be done as follows:
+   Given a COMMIT value, if you later receive its REVEAL value it should be
+   possible to verify that they indeed correspond. This can be done as follows:
 
       TIMESTAMP_R || RN = base64-decode(REVEAL)
       TIMESTAMP_C || COMMIT_SIG = base64-decode(COMMIT)
