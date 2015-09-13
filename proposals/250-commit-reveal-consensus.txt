@@ -244,9 +244,16 @@ Supersedes: 225
    last commitment phase. If a commitment value of an other authority is NOT
    in their state, they should ignore the reveal value from that authority.
 
-   Reveal values that are received in votes from other authorities are saved
-   to the persistent state and only put in the vote at the next reveal phase
-   if they have been seen for the first time.
+   Authorities that just received a reveal value for the first time from another
+   authority, should wait a round before including that value in their votes (to
+   avoid race conditions during voting). So an authority that saw reveal value
+   r_1 at a vote from 03:00UTC, should start including r_1 in its own votes at
+   04:00UTC.
+
+   Similarly, authorities that received a reveal value for the first time during
+   the last reveal round (11:00UTC), should *not* include it in the shared
+   randomness calculation, except if that reveal value was voted by the
+   majority (to avoid partinioning attacks).
 
 3.2.2. Persistent State During Reveal Phase [STATEREVEAL]
 
