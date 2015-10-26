@@ -36,7 +36,7 @@ Status: Draft
 2. Overview
 
    This proposal alters the Tor consensus protocol such that a random number is
-   generated every noon by the directory authorities during the regular voting
+   generated every midnight by the directory authorities during the regular voting
    process. The distributed random generator scheme is based on the
    commit-and-reveal technique.
 
@@ -46,7 +46,7 @@ Status: Draft
 2.1. Ten thousand feet view
 
    Our commit-and-reveal protocol aims to produce a fresh shared random value
-   everyday at 12:00UTC. The final fresh random value is embedded in the
+   everyday at 00:00UTC. The final fresh random value is embedded in the
    consensus document at that time.
 
    Our protocol has two phases and uses the hourly voting procedure of Tor.
@@ -55,29 +55,29 @@ Status: Draft
 
       Commit phase:
 
-        Starting at 12:00UTC and for a period of 12 hours, authorities every
+        Starting at 00:00UTC and for a period of 12 hours, authorities every
         hour send their commitments in their votes. They also include any
         received commitments from other authorities, if available.
 
       Reveal phase:
 
-        At 00:00UTC, the reveal phase starts and lasts till the end of the
-        protocol at 12:00UTC. In this stage, authorities must reveal the value
+        At 12:00UTC, the reveal phase starts and lasts till the end of the
+        protocol at 00:00UTC. In this stage, authorities must reveal the value
         they committed to in the previous phase. The commitment and revealed
         values from other authorities, when available, are also added to the
         vote.
 
       Shared Randomness Calculation:
 
-        At 12:00UTC, the shared random value is computed from the agreed
+        At 00:00UTC, the shared random value is computed from the agreed
         revealed values and added to the consensus.
 
-   This concludes the commit-and-reveal procedure at 12:00UTC everyday.
+   This concludes the commit-and-reveal procedure at 00:00UTC everyday.
 
 2.2. Commit & Reveal
 
    Our commit-and-reveal protocol aims to produce a fresh shared random value
-   everyday at 12:00UTC.
+   everyday at 00:00UTC.
 
    In the beginning of that time period, each authority generates a new random
    value and keeps it for the whole day. The authority cryptographically signs a
@@ -157,7 +157,7 @@ Status: Draft
 
 3.1 Commitment Phase [COMMITMENTPHASE]
 
-   The commit phase lasts from 12:00UTC to 00:00UTC.
+   The commit phase lasts from 00:00UTC to 12:00UTC.
 
    During this phase, an authority commits a value in its vote and saves it to
    its state as well. Authorities decide which commits are active at any given
@@ -202,22 +202,22 @@ Status: Draft
 3.1.3. First & Last Round Of Commitment Phase [FIRSTLASTROUND]
 
    It's worth mentioning that during the very first round of the commitment
-   phase at 12:00UTC, each authority votes its own commitment and is unaware of
+   phase at 00:00UTC, each authority votes its own commitment and is unaware of
    the commitments of the other authorities. For this reason, it's not possible
    that a majority opinion about commitments will be created at
-   12:00UTC. Instead authorities are expected to form a majority opinion and
-   transcribe commitments to their state during the voting period of 13:00UTC or
+   00:00UTC. Instead authorities are expected to form a majority opinion and
+   transcribe commitments to their state during the voting period of 01:00UTC or
    at least until the reveal phase.
 
    Similarly, an authority will not be able to commit to a new value during
    the last round of the commitment phase. That's because there won't be
    enough time for the other authorities to form a majority opinion about this
    value before the reveal phase. Hence, Tor authorities SHOULD NOT commit new
-   values during the last round of the commitment phase at 23:00UTC.
+   values during the last round of the commitment phase at 11:00UTC.
 
 3.2 Reveal Phase
 
-   The reveal phase lasts from 00:00UTC to 12:00UTC.
+   The reveal phase lasts from 12:00UTC to 00:00UTC.
 
    Now that the commitments have been agreed on, it's time for authorities to
    reveal their random values.
@@ -261,11 +261,11 @@ Status: Draft
 
    Section [FIRSTLASTROUND] also applies for the reveal phase. This means that
    Tor authorities SHOULD NOT reveal new values during the last round of the
-   reveal phase at 11:00UTC.
+   reveal phase at 23:00UTC.
 
-3.3. Shared Random Value Calculation At 12:00UTC
+3.3. Shared Random Value Calculation At 00:00UTC
 
-   Finally, at 12:00UTC every day, authorities compute a fresh shared random
+   Finally, at 00:00UTC every day, authorities compute a fresh shared random
    value and this value must be added to the consensus so clients can use it.
 
    Authorities calculate the shared random value using the reveal values in
@@ -275,7 +275,7 @@ Status: Draft
    directory authorities, it MUST NOT be created. Instead, the old shared
    random value should be used as specified in section [SRDISASTER].
 
-   Authorities at 12:00UTC start including this new shared random value in
+   Authorities at 00:00UTC start including this new shared random value in
    their votes, replacing the one from two protocol runs ago. Authorities also
    start including this new shared random value in the consensus as well.
 
@@ -313,7 +313,7 @@ Status: Draft
    overlay periods to work properly as specified in proposal 224. Hence
    clients MUST NOT use the randomness of this system till it has bootstrapped
    completely; that is, until two shared random values are included in a
-   consensus. This should happen after three 12:00UTC consensuses have been
+   consensus. This should happen after three 00:00UTC consensuses have been
    produced, which takes 48 hours.
 
 3.5. Rebooting Directory Authorities [REBOOT]
@@ -343,7 +343,7 @@ Status: Draft
 
 3.7. Shared Randomness Disaster Recovery [SRDISASTER]
 
-   If the consensus at 12:00UTC fails to be created, then there will be no fresh
+   If the consensus at 00:00UTC fails to be created, then there will be no fresh
    shared random value for the day.
 
    In this case, and assuming there is a previous shared random value, directory
@@ -371,7 +371,7 @@ Status: Draft
    A directory authority that wants to participate in this protocol needs to
    create a new pair of commitment/reveal values for every protocol
    run. Authorities SHOULD generate a fresh pair of such values right before the
-   first commitment phase of the day (at 12:00UTC).
+   first commitment phase of the day (at 00:00UTC).
 
    The procedure is as follows:
        1. Authority generates a fresh 256-bit random value RN.
@@ -688,15 +688,15 @@ Status: Draft
    big problem. Also, this way we give more chances for a failing dirauth to
    recover and rejoin the protocol.
 
-6.3. Why can't we recover if we fail to do a consensus at 12:00UTC?
+6.3. Why can't we recover if we fail to do a consensus at 00:00UTC?
 
-   Section [SRDISASTER] specifies that if the 12:00UTC consensus fails to be
+   Section [SRDISASTER] specifies that if the 00:00UTC consensus fails to be
    created, we simply hash the random value of the previous day and use it as
    the new shared random value. This changes the daily value but fails to make
    it fresh, which is not optimal.
 
    Theoretically, we could recover by calculating the shared randomness of the
-   day at 13:00UTC instead. However, adding such fallback logic would
+   day at 01:00UTC instead. However, adding such fallback logic would
    complicate the protocol even further, so we have not yet considered it.
 
 7. Appendix
