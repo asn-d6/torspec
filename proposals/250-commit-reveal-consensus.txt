@@ -5,6 +5,56 @@ Created: 2015-08-03
 Status: Draft
 Supersedes: 225
 
+
+   Table Of Contents:
+
+		1. Introduction
+		1.1. Motivation
+		1.2. Previous work
+		2. Overview
+		2.1. Ten thousand feet view
+		2.2. Commit & Reveal
+		2.3. Consensus [CONS]
+		2.4. Persistent State of the Protocol [STATE]
+		2.5. Protocol Illustration
+		3. Protocol
+		3.1 Commitment Phase [COMMITMENTPHASE]
+		3.1.1. Voting During Commitment Phase
+		3.1.2. Persistent State During Commitment Phase [STATECOMMIT]
+		3.1.3. First & Last Round Of Commitment Phase [FIRSTLASTROUND]
+		3.2 Reveal Phase
+		3.2.1. Voting During Reveal Phase
+		3.2.2. Persistent State During Reveal Phase [STATEREVEAL]
+		3.3. Shared Random Value Calculation At 00:00UTC
+		3.3.1. Shared Randomness Calculation [SRCALC]
+		3.4. Bootstrapping Procedure
+		3.5. Rebooting Directory Authorities [REBOOT]
+		3.6. How we define majority [MAJORITY]
+		3.7. Shared Randomness Disaster Recovery [SRDISASTER]
+		4. Specification [SPEC]
+		4.1 Voting
+		4.1.1. Computing commitments and reveals [COMMITREVEAL]
+		4.1.2. Validating commitments and reveals [VALIDATEVALUES]
+		4.1.4. Encoding commit/reveal values in votes
+		4.1.5. Shared Random Value [SRVOTE]
+		4.1.6. Conflict [COMMITCONFLICT]
+		4.1.7. Including the ed25519 shared randomness key in votes [SRKEY]
+		4.2. Persistent State
+		4.2.1 Format [STATEFORMAT]
+		4.3. Shared Random Value in Consensus [SRCONSENSUS]
+		5. Security Analysis
+		5.1. Security of commit-and-reveal and future directions
+		5.2. Is there a need for a final agreement phase?
+		5.3. Predicting the shared random value during reveal phase
+		6. Discussion
+		6.1. Why the added complexity from proposal 225?
+		6.2. Why do you do a commit-and-reveal protocol in 24 rounds?
+		6.3. Why can't we recover if we fail to do a consensus at 00:00UTC?
+		7. Appendix
+		7.1. Example commitment majority [COMMITEXAMPLE]
+		7.2. Example reveal phase [REVEALEXAMPLE]
+
+
 1. Introduction
 
 1.1. Motivation
