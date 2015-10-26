@@ -255,8 +255,9 @@ Status: Draft
    MUST wait till the next voting round before including that reveal value in
    its votes.
 
-   An authority transcribes a foreign reveal value to permanent state, only
-   after that reveal value has been broadcasted personally by that authority.
+   An authority MUST transcribe a foreign reveal value to permanent state or use
+   it for shared randomness calculation, only after that reveal value has been
+   broadcasted personally by that authority.
 
    Section [FIRSTLASTROUND] also applies for the reveal phase. This means that
    Tor authorities SHOULD NOT reveal new values during the last round of the
@@ -335,32 +336,10 @@ Status: Draft
 
 3.6. How we define majority [MAJORITY]
 
-   The shared randomness protocol must be able to support directory
-   authorities who participate in the consensus protocol but not in the shared
-   randomness protocol. It must also be able to tolerate authorities who drop
-   or join in the middle of the protocol.
-
-   The security of this proposal strongly relies on forming majority opinion
-   so it's important for the number of participants to always be well defined:
-
-   In each voting session we define the number of active participants to be the
-   number of directory authorities that included their *own* commit/reveal
-   values in their votes.
-
-   As specified in sections [STATECOMMIT] and [STATEREVEAL], a commit/reveal
-   value should be transcribed to the an authority state iff the majority
-   voted for it. So for example, if there are 6 active participants, a commit
-   value will only be transcribed if 4 or more participants agreed on it.
-
-   XXX The number of active participants is dynamic as authorities leave and
-       join the protocol. Since the number of active participants is dynamic ,
-       an attacker could trick some authorities believing there are N
-       participants and some others believing there are N-1 participants, by
-       sending different votes to different auths. Should we worry? [asn]
-
-       A way to avoid a dynamic number of participants could be to set the
-       number of participants to be the number of auths who committed during the
-       very first commitment phase round.
+   Through this whole document we define the number of participants as the total
+   number of authorities, regardless of how many authorities voted in each
+   round. So majority is achieved only if more than half of the total
+   authorities agree on a particular commitment value.
 
 3.7. Shared Randomness Disaster Recovery [SRDISASTER]
 
@@ -403,17 +382,18 @@ Status: Draft
 
       REVEAL = base64-encode( TIMESTAMP || RN )
 
-      where TIMESTAMP is a big-endian unsigned 64 bit integer being the number
-      of seconds since the Unix epoch. RN is the 256-bit random value RN.
+      where RN is the 256-bit random value RN, and TIMESTAMP is a 64-bit Unix
+      timestamp that points to the current protocol run (so it's between 00:00
+      and 24:00 of that day).
 
    The value COMMIT is computed as follows:
 
       SIGNATURE = ed25519-sign( privkey=PRIVKEY, msg=H(REVEAL) || TIMESTAMP )
-      COMMIT = base64-encode( TIMESTAMP || H(REVEAL) || SIGNATURE )
+      COMMIT = base64-encode( H(REVEAL) || TIMESTAMP || SIGNATURE )
 
-      where PRIVKEY is the identity key of the authority that is used to sign
-      the vote documents. TIMESTAMP is the same as the one used for REVEAL.
-      H is the hashing algorithm "sha256".
+      where the signature is performed using a special shared randomness ed25519
+      key [SRKEY]. TIMESTAMP MUST be the same as the one used for REVEAL.  H is
+      the hashing algorithm "sha256".
 
 4.1.2. Validating commitments and reveals [VALIDATEVALUES]
 
@@ -431,8 +411,8 @@ Status: Draft
       return ed25519-verify( pubkey=PUBKEY, sig=COMMIT_SIG,
                              msg=H(RN) || TIMESTAMP )
 
-      where PUBKEY is the identity public key of the authority revealing its
-      value. H is the hashing algorithm "sha256".
+      where PUBKEY is the public key of the shared randomness ed25519 key
+      [SRKEY] and H is the hashing algorithm "sha256".
 
       TIMESTAMP_R must be equal to TIMESTAMP_C else REVEAL is an invalid value
       for COMMIT.
@@ -440,24 +420,13 @@ Status: Draft
    Authorities should ignore reveal values during the Reveal Phase that don't
    correspond to commit values published during the Commitment Phase.
 
-4.1.3. Encoding the authority's own commit/reveal value
+4.1.4. Encoding commit/reveal values in votes
 
-   The commitment value COMMIT (as computed in [COMMITREVEAL]) should be included
-   on votes as follows:
+   An authority puts in its vote the commitments and reveals it has produced and
+   seen from the other authorities. To do so, it includes the following in its
+   votes:
 
-      "shared-rand-commitment" SP algname SP COMMIT [SP REVEAL] NL
-
-   During the Reveal Phase, an authority can also optionally publish its reveal
-   value REVEAL. The "algname" is the hash algorithm that should be used to
-   compute COMMIT and REVEAL if any. It should be "sha256" for version 1.
-
-4.1.4. Encoding commit/reveal values received by other authorities [COMMITOTHER]
-
-   An authority puts in its vote the commitments and reveals it has seen from
-   the other authorities. To do so, it includes the following in its votes:
-
-      "shared-rand-received-commitment" SP identity SP algname SP
-                                           COMMIT [SP REVEAL] NL
+      "shared-rand-commitment" SP identity SP algname SP COMMIT [SP REVEAL] NL
 
    where "identity" is the hex-encoded commitment's authority fingerprint and
    COMMIT is the received commitment value. Authorities can also optionally
@@ -514,6 +483,51 @@ Status: Draft
    authority identified by "identity" and if so, ignore that authority until
    the next protocol run. If the conflict line is invalid, ignore it.
 
+4.1.7. Including the ed25519 shared randomness key in votes [SRKEY]
+
+   We don't want to use the master or signing key of the dirauth to sign the
+   commitments because those keys can also be kept offline for greater security.
+
+   Hence each dirauth will generate a special ed25519 key specifically for
+   shared randomness purposes. Its lifetime should be medium-term similar to the
+   lifetime of the signing key.
+
+   The shared randomness key needs to be included in the votes of each
+   authority, as well as the certificates required to bind it with the RSA
+   master key. We basically need the following chain:
+
+      [RSA master key -> ed25519 master key -> ed25519 signing key -> ed25519 shared randomness key]
+
+   To do so, we include the following two fields in vote documents as part
+   of the dir-source block:
+
+    "signing-ed25519" NL "-----BEGIN ED25519 CERT-----" NL certificate
+           "-----END ED25519 CERT-----" NL
+
+        [At most once]
+
+        The certificate is a base64-encoded Ed25519 certificate (see
+        cert-spec.txt) terminating =s removed.
+
+        The certificate has CERT_TYPE of [04] and it certifies the ed25519
+        master signing key under the ed25519 master key. The certificate also
+        includes the ed25519 master key in it certifying it under the RSA master
+        key (since it's included in a vote which is signed by the RSA key).
+
+    "shared-random-ed25519" NL "-----BEGIN ED25519 CERT-----" NL certificate
+           "-----END ED25519 CERT-----" NL
+
+        [At most once]
+
+        The certificate is a base64-encoded Ed25519 certificate (see
+        cert-spec.txt) terminating =s removed.
+
+        The certificate has CERT_TYPE of [04] and it certifies the ed25519
+        shared randomness key under the ed25519 singing key.
+
+
+   This last certificate completes the chain and allows dirauths to extract the
+   ed25519 shared randomness key.
 
 4.2. Persistent State
 
@@ -616,20 +630,23 @@ Status: Draft
    contain this new reveal, and the rest who don't know about it. This would
    result in a tie and two different shared random value.
 
-   However, we believe that an agreement phase is not necessary in our
-   protocol since reveal values are choosen if only if the majority agrees.
-   Hence, a tie is not enough to confuse the authorities since it's not
-   majority and the offending value would just be discarded.
+   Similar attacks are possible in this protocol as well. For example, two
+   rounds before the end of the reveal phase, an attacker could advertise her
+   reveal value to only half of the dirauths. This way, in the last reveal phase
+   round, half of the dirauths will include that reveal value in their votes and
+   the others will not. In the end of the reveal phase, half of the dirauths
+   will calculate a different shared randomness value than the others.
 
-   That said, an attack that could still work here would be if an authority
-   can make half of the authorities believe that the value should be
-   discarded, and make the other half of the authorities believe that the
-   value should be included. That could be achieved if the attacker could
-   force honest authorities to send different votes to different authorities.
-   We believe this should not be the case currently, but we should look more
-   into this.
+   We claim that this attack is not particularly fruitful: the attacker ends up
+   having two shared random values to chose from which is a fundamental problem
+   of commit-and-reveal protocols as well (since the last person can always
+   abort or reveal). The attacker can also sabotage the consensus, but there are
+   other ways this can be done with the current voting system.
 
-   XXX Needs feedback by a person who knows the voting protocol well!!!
+   Furthermore, we claim that such an attack is very noisy and detectable. First
+   of all, it requires the authority to sabotage two consensuses which will
+   cause quite some noise. Furthermore, the authority needs to send different
+   votes to different auths which is detectable using DocTor.
 
 5.3. Predicting the shared random value during reveal phase
 
