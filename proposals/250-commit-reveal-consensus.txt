@@ -161,7 +161,7 @@ Supersedes: 225
 2.4. Persistent State of the Protocol [STATE]
 
    A directory authority needs to keep a persistent state on disk of the on
-   going protocol phases. This allows an authority to join the protocol in the
+   going protocol run. This allows an authority to join the protocol in the
    case of a reboot.
 
    During the commitment phase, it is populated with the commitments of all
@@ -205,16 +205,19 @@ Supersedes: 225
 
    The commit phase lasts from 00:00UTC to 12:00UTC.
 
-   During this phase, an authority commits a value in its vote and saves it to
-   its state as well. Authorities decide which commits are kept in state at
-   any given time by keeping authoritative commit which is a commit coming
-   directly from an authority.
+   During this phase, an authority commits a value in its vote and
+   saves it to the permanent state as well.
+
+   Authorities also save any received authoritative commits by other
+   authorities in their permanent state. We call a commit by Alice
+   "authoritative" if was signed by Alice's shared randomness key and
+   also included in Alice's vote.
 
 3.1.1. Voting During Commitment Phase
 
    During the commit phase, each authority includes in its votes:
 
-    - A commitment value for this consensus period.
+    - The commitment value for this protocol run.
     - Any commitments received from other authorities.
     - The two previous shared random values produced by the protocol (if any).
 
