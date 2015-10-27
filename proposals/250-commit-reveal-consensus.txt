@@ -34,7 +34,7 @@ Status: Draft
 		4.1 Voting
 		4.1.1. Computing commitments and reveals [COMMITREVEAL]
 		4.1.2. Validating commitments and reveals [VALIDATEVALUES]
-		4.1.4. Encoding commit/reveal values in votes
+		4.1.4. Encoding commit/reveal values in votes [COMMITVOTE]
 		4.1.5. Shared Random Value [SRVOTE]
 		4.1.6. Conflict [COMMITCONFLICT]
 		4.1.7. Including the ed25519 shared randomness key in votes [SRKEY]
@@ -137,7 +137,7 @@ Status: Draft
    The idea is that given a reveal value you can cryptographically confirm that
    it corresponds to a given commitment value. However given a commitment value
    you should not be able to derive the underlying reveal value. The
-   construction of these values is specified in section [COMMITREVEAL]. 
+   construction of these values is specified in section [COMMITREVEAL].
 
 2.3. Consensus [CONS]
 
@@ -342,18 +342,18 @@ Status: Draft
 
       SRV = HMAC(HASHED_REVEALS,
                 "shared-random" | INT_8(reveal_num) | INT_8(version) |
-                previous_SR)
+                previous_SRV)
 
-   where the ID_a value is the identity fingerprint of directory authority 'a'
-   and R_a is the corresponding reveal value of that authority for the current
-   period.
+   where the ID_a value is the base64 encoded SR key [SRKEY] of the directory
+   authority 'a' and R_a is the corresponding reveal value of that authority
+   for the current period.
 
    Also, "reveal_num" is the number of revealed values in this construction,
-   "version" is the protocol version number and "previous_SR" is the previous
+   "version" is the protocol version number and "previous_SRV" is the previous
    shared random value if any.
 
    To maintain consistent ordering, ID_a | R_a pairs are ordered based on the
-   identity fingerprint of the authority in ascending order.
+   base64 encoded SR key of the authority in ascending order.
 
    For protocol version 1, H is SHA256 and HMAC is HMAC-SHA256.
 
@@ -400,9 +400,9 @@ Status: Draft
    authorities should use the following construction as the shared random value
    of the day:
 
-       SRV = HMAC(previous_SR, "shared-random-disaster")
+       SRV = HMAC(previous_SRV, "shared-random-disaster")
 
-   where "previous_SR" is the previous shared random value.
+   where "previous_SRV" is the previous shared random value.
 
    Clients should keep on using this shared random values.
 
@@ -459,7 +459,7 @@ Status: Draft
       TIMESTAMP_C || COMMIT_SIG = base64-decode(COMMIT)
 
       return ed25519-verify( pubkey=PUBKEY, sig=COMMIT_SIG,
-                             msg=H(RN) || TIMESTAMP )
+                             msg=H(REVEAL) || TIMESTAMP_C )
 
       where PUBKEY is the public key of the shared randomness ed25519 key
       [SRKEY] and H is the hashing algorithm "sha256".
@@ -470,7 +470,7 @@ Status: Draft
    Authorities should ignore reveal values during the Reveal Phase that don't
    correspond to commit values published during the Commitment Phase.
 
-4.1.4. Encoding commit/reveal values in votes
+4.1.4. Encoding commit/reveal values in votes [COMMITVOTE]
 
    An authority puts in its vote the commitments and reveals it has produced and
    seen from the other authorities. To do so, it includes the following in its
@@ -478,12 +478,12 @@ Status: Draft
 
       "shared-rand-commitment" SP identity SP algname SP COMMIT [SP REVEAL] NL
 
-   where "identity" is the hex-encoded commitment's authority fingerprint and
-   COMMIT is the received commitment value. Authorities can also optionally
-   include the reveal value REVEAL. There MUST be only one line per authority
-   else the vote is considered invalid. Finally, the "algname" is the hash
-   algorithm that should be used to compute COMMIT and REVEAL which is
-   "sha256" for version 1.
+   where "identity" is the base64 encoded commitment's authority SR key
+   [SRKEY] and COMMIT is the received encoded commitment [COMMITREVEAL].
+   Authorities can also optionally include the encoded reveal value REVEAL.
+   There MUST be only one line per authority else the vote is considered
+   invalid. Finally, the "algname" is the hash algorithm that should be used
+   to compute COMMIT and REVEAL which is "sha256" for version 1.
 
 4.1.5. Shared Random Value [SRVOTE]
 
@@ -512,7 +512,7 @@ Status: Draft
 
       "shared-rand-conflict" SP identity SP commit1 SP commit2 NL
 
-   where "identity" is the hex-encoded commitment's authority fingerprint.
+   where "identity" is the base64 encoded commitment's authority fingerprint.
    "commit1" is the previous commit that the authority had in its state and
    "commit2" is the new received commit of the same period. Both commit values
    are constructed as specified in section [COMMITREVEAL].
@@ -582,7 +582,8 @@ Status: Draft
 4.2. Persistent State
 
    As a way to keep ground truth state in this protocol, an authority MUST
-   keep a persistent state of the protocol.
+   keep a persistent state of the protocol. The next sub-section suggest a
+   format for this state which is the same as the current state file format.
 
 4.2.1 Format [STATEFORMAT]
 
@@ -592,13 +593,13 @@ Status: Draft
    The preamble (or header) contains the following items. They MUST occur in
    the order given here:
 
-    "shared-random-version" SP version NL
+    "Version" SP version NL
 
         [At start, exactly once.]
 
         A document format version. For this specification, version is "1".
 
-    "valid-until" SP YYYY-MM-DD SP HH:MM:SS NL
+    "ValidUntil" SP YYYY-MM-DD SP HH:MM:SS NL
 
         [Exactly once]
 
@@ -606,40 +607,41 @@ Status: Draft
         trusted. The validity time period is till the end of the current
         protocol run (the upcoming noon).
 
-    "protocol-phase" SP phase NL
+    "ProtocolPhase" SP phase NL
 
         [Exactly once]
 
         The current protocol phase when this document is generated. The
-        accepted values are: "commitment" and "reveal".
+        accepted values are: "commit" and "reveal". This is mostly used for
+        human to be able to know that phase the state was last in.
 
-   The following details the commitment and reveal section.
+   The following details the commitment and reveal section. They are encoded
+   the same as in the vote. This makes it easier for implementation purposes.
 
-     "shared-rand-commitment" SP algname SP identity SP
-                              YYYY-MM-DD SP HH:MM:SS SP
-                              commitment-value [SP revealed-value] NL
+     "Commitment" SP identity SP algname SP commit [SP reveal] NL
 
         [Exactly once per authority]
 
-        This is the commitment or/and reveal value agreed upon by the majority
-        from one authority. The algname is always "sha256" in version 1. The
-        "identity" is the authority hex-encoded digest of the authority
-        identity key of the signing authority from which the values are from.
-        Finally, "{commitment|revealed}-value" is the value as specified in
-        section [SPEC].
+        The values are the same as detailed in section [COMMITVOTE].
 
         This line is also used by an authority to store its own value.
 
+     "Conflict" SP identity SP commit1 SP commit2 NL
+
+        [At most once per authority if any]
+
+        The values are the same as detailed in section [COMMITCONFLICT].
+
    Finally is the shared random value section.
 
-     "shared-rand-previous-value" SP status SP value NL
+     "SharedRandPreviousValue" SP status SP value NL
 
         [At most once]
 
         This is the previous shared random value agreed on at the previous
         period. The fields are the same as in section [SRVOTE].
 
-     "shared-rand-current-value" SP status SP value NL
+     "SharedRandCurrentValue" SP status SP value NL
 
         [At most once]
 
