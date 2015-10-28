@@ -9,45 +9,48 @@ Supersedes: 225
    Table Of Contents:
 
 		1. Introduction
-		1.1. Motivation
-		1.2. Previous work
+         1.1. Motivation
+         1.2. Previous work
 		2. Overview
-		2.1. Ten thousand feet view
-		2.2. Commit & Reveal
-		2.3. Consensus [CONS]
-		2.4. Persistent State of the Protocol [STATE]
-		2.5. Protocol Illustration
+         2.1. Ten thousand feet view
+         2.2. Commit & Reveal
+         2.3. Consensus [CONS]
+         2.4. Persistent State of the Protocol [STATE]
+         2.5. Protocol Illustration
 		3. Protocol
-		3.1 Commitment Phase [COMMITMENTPHASE]
-		3.1.1. Voting During Commitment Phase
-		3.1.2. Persistent State During Commitment Phase [STATECOMMIT]
-		3.2 Reveal Phase
-		3.2.1. Voting During Reveal Phase
-		3.2.2. Persistent State During Reveal Phase [STATEREVEAL]
-		3.3. Shared Random Value Calculation At 00:00UTC
-		3.3.1. Shared Randomness Calculation [SRCALC]
-		3.4. Bootstrapping Procedure
-		3.5. Rebooting Directory Authorities [REBOOT]
-		3.6. Shared Randomness Disaster Recovery [SRDISASTER]
+         3.1 Commitment Phase [COMMITMENTPHASE]
+            3.1.1. Voting During Commitment Phase
+            3.1.2. Persistent State During Commitment Phase [STATECOMMIT]
+         3.2 Reveal Phase
+            3.2.1. Voting During Reveal Phase
+            3.2.2. Persistent State During Reveal Phase [STATEREVEAL]
+         3.3. Shared Random Value Calculation At 00:00UTC
+            3.3.1. Shared Randomness Calculation [SRCALC]
+         3.4. Bootstrapping Procedure
+         3.5. Rebooting Directory Authorities [REBOOT]
+         3.6. Shared Randomness Disaster Recovery [SRDISASTER]
 		4. Specification [SPEC]
-		4.1 Voting
-		4.1.1. Computing commitments and reveals [COMMITREVEAL]
-		4.1.2. Validating commitments and reveals [VALIDATEVALUES]
-		4.1.4. Encoding commit/reveal values in votes [COMMITVOTE]
-		4.1.5. Shared Random Value [SRVOTE]
-		4.1.6. Conflict [COMMITCONFLICT]
-		4.1.7. Including the ed25519 shared randomness key in votes [SRKEY]
-		4.2. Persistent State
-		4.2.1 Format [STATEFORMAT]
-		4.3. Shared Random Value in Consensus [SRCONSENSUS]
+         4.1 Voting
+            4.1.1. Computing commitments and reveals [COMMITREVEAL]
+            4.1.2. Validating commitments and reveals [VALIDATEVALUES]
+            4.1.4. Encoding commit/reveal values in votes [COMMITVOTE]
+            4.1.5. Shared Random Value [SRVOTE]
+            4.1.6. Conflict [COMMITCONFLICT]
+            4.1.7. Including the ed25519 shared randomness key in votes [SRKEY]
+         4.2. Persistent State
+            4.2.1 Format [STATEFORMAT]
+         4.3. Shared Random Value in Consensus [SRCONSENSUS]
 		5. Security Analysis
-		5.1. Security of commit-and-reveal and future directions
-		5.2. Is there a need for a final agreement phase?
-		5.3. Predicting the shared random value during reveal phase
+         5.1. Security of commit-and-reveal and future directions
+         5.2. Is there a need for a final agreement phase?
+         5.3. Predicting the shared random value during reveal phase
+         5.4. Partition Attack
+            5.4.1 During commit phase
+            5.4.2 During reveal phase
 		6. Discussion
-		6.1. Why the added complexity from proposal 225?
-		6.2. Why do you do a commit-and-reveal protocol in 24 rounds?
-		6.3. Why can't we recover if we fail to do a consensus at 00:00UTC?
+         6.1. Why the added complexity from proposal 225?
+         6.2. Why do you do a commit-and-reveal protocol in 24 rounds?
+         6.3. Why can't we recover if we fail to do a consensus at 00:00UTC?
 
 
 1. Introduction
@@ -674,6 +677,51 @@ Supersedes: 225
 
    Any other protocols using the shared random value from this system should
    be aware of this property.
+
+5.4 Partition attack [PARTITIONATTACK]
+
+   This design is not immune to certain partition attacks. We believe they
+   don't offer much gain to an attacker as they are very easy to detect and
+   difficult to pull off since an attacker would need to compromised a
+   directory authority at the very least. Nevertheless, this section describes
+   all possible partition attack and how to detect them.
+
+5.4.1 During commit phase
+
+   A malicious directory authority could send only its commit to one single
+   authority which results in that authority having an extra commit value for
+   the shared random calculation that the others don't have. Since the
+   consensus needs majority, this won't affect the final SRV value. However,
+   the attacker, with this technique, could easily remove one directory
+   authority from the consensus decision at 24:00 when the SRV is computed.
+
+   Because we use a conflict mechanism [COMMITCONFLICT], a partition attack
+   during the commit phase will be detected in the reveal phase at the very
+   least and thus a malicious authority sending different commits to different
+   authority will trigger a conflict and will be ignored for the rest of the
+   protocol run. This is because all votes are broadcasted to others for this
+   reason and conflict line are carried through the full protocol run (commit
+   and reveal phase).
+
+   All of the above is fairly easy to detect. The main aspect of the voting
+   mechanism is that an authority vote should NEVER be different between
+   authorities. If so, this means an attack is ongoing or very bad bug (highly
+   unlikely).
+
+5.4.2 During reveal phase
+
+   Multiple partition attacks are possible here but they all end up in
+   avoiding the 24:00 consensus to be created that is the consensus with a
+   fresh shared random value.
+
+   Let's consider Alice, a malicious directory authority. Alice can send her
+   reveal value to half the group and nothing to the other half thus
+   partitioning the authorities into two groups ultimately ending up with no
+   consensus at 24:00 since the SRV value is different between the two groups
+   and thus no majority.
+
+   This can be detected again by looking at the votes and if they are
+   different between authorities something is up.
 
 6. Discussion
 
