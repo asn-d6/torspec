@@ -41,11 +41,10 @@ Status: Draft
          4.3. Shared Random Value in Consensus [SRCONSENSUS]
 		5. Security Analysis
          5.1. Security of commit-and-reveal and future directions
-         5.2. Is there a need for a final agreement phase?
-         5.3. Predicting the shared random value during reveal phase
-         5.4. Partition Attack
-            5.4.1 During commit phase
-            5.4.2 During reveal phase
+         5.2. Predicting the shared random value during reveal phase
+         5.3. Partition Attack
+            5.3.1 During commit phase
+            5.3.2 During reveal phase
 		6. Discussion
          6.1. Why the added complexity from proposal 225?
          6.2. Why do you do a commit-and-reveal protocol in 24 rounds?
@@ -632,38 +631,7 @@ Status: Draft
    crypto and more complex protocols so this seems like an acceptable solution
    for now.
 
-5.2. Is there a need for a final agreement phase?
-
-   Commit-and-reveal protocols usually also end with an agreement phase,
-   during which participants agree on which reveal values should be used to
-   make the shared random value.
-
-   An agreement phase is needed, because if the protocol ended with the reveal
-   phase, an evil authority could wait until the last reveal round, and reveal
-   its value to half of the authorities. That would partition the authorities
-   into two sets: the ones who think that the shared random value should
-   contain this new reveal, and the rest who don't know about it. This would
-   result in a tie and two different shared random value.
-
-   Similar attacks are possible in this protocol as well. For example, two
-   rounds before the end of the reveal phase, an attacker could advertise her
-   reveal value to only half of the dirauths. This way, in the last reveal phase
-   round, half of the dirauths will include that reveal value in their votes and
-   the others will not. In the end of the reveal phase, half of the dirauths
-   will calculate a different shared randomness value than the others.
-
-   We claim that this attack is not particularly fruitful: the attacker ends up
-   having two shared random values to chose from which is a fundamental problem
-   of commit-and-reveal protocols as well (since the last person can always
-   abort or reveal). The attacker can also sabotage the consensus, but there are
-   other ways this can be done with the current voting system.
-
-   Furthermore, we claim that such an attack is very noisy and detectable. First
-   of all, it requires the authority to sabotage two consensuses which will
-   cause quite some noise. Furthermore, the authority needs to send different
-   votes to different auths which is detectable using DocTor.
-
-5.3. Predicting the shared random value during reveal phase
+5.2. Predicting the shared random value during reveal phase
 
    The reveal phase lasts 12 hours, and most authorities will send their
    reveal value on the first round of the reveal phase. This means that an
@@ -677,7 +645,7 @@ Status: Draft
    Any other protocols using the shared random value from this system should
    be aware of this property.
 
-5.4 Partition attack [PARTITIONATTACK]
+5.3 Partition attack
 
    This design is not immune to certain partition attacks. We believe they
    don't offer much gain to an attacker as they are very easy to detect and
@@ -685,42 +653,55 @@ Status: Draft
    directory authority at the very least. Nevertheless, this section describes
    all possible partition attack and how to detect them.
 
-5.4.1 During commit phase
+5.3.1 During commit phase
 
    A malicious directory authority could send only its commit to one single
    authority which results in that authority having an extra commit value for
    the shared random calculation that the others don't have. Since the
    consensus needs majority, this won't affect the final SRV value. However,
-   the attacker, with this technique, could easily remove one directory
-   authority from the consensus decision at 24:00 when the SRV is computed.
+   the attacker, using this attack, could remove a single directory authority
+   from the consensus decision at 24:00 when the SRV is computed.
 
-   Because we use a conflict mechanism [COMMITCONFLICT], a partition attack
-   during the commit phase will be detected in the reveal phase at the very
-   least and thus a malicious authority sending different commits to different
-   authority will trigger a conflict and will be ignored for the rest of the
-   protocol run. This is because all votes are broadcasted to others for this
-   reason and conflict line are carried through the full protocol run (commit
-   and reveal phase).
+   If an attacker sends two different (or more) commit values either to
+   different authority in the same period or during the whole comit phase, a
+   conflict will be detected [COMMITCONFLICT]. Because of this conflict
+   mechanism, it's not possible to partition the authorities since ultimately
+   this authority will be ignored. All votes are broadcasted to others and
+   conflict line are carried through out the full protocol run (commit and
+   reveal phase).
 
-   All of the above is fairly easy to detect. The main aspect of the voting
-   mechanism is that an authority vote should NEVER be different between
-   authorities. If so, this means an attack is ongoing or very bad bug (highly
-   unlikely).
+   All of the above is fairly easy to detect. Commitment values in the vote
+   coming from an authority should NEVER be different between authorities. If
+   so, this means an attack is ongoing or very bad bug (highly unlikely).
 
-5.4.2 During reveal phase
+5.3.2 During reveal phase
 
-   Multiple partition attacks are possible here but they all end up in
-   avoiding the 24:00 consensus to be created that is the consensus with a
-   fresh shared random value.
+   Let's consider Alice, a malicious directory authority. Alice could wait
+   until the last reveal round, and reveal its value to half of the
+   authorities. That would partition the authorities into two sets: the ones
+   who think that the shared random value should contain this new reveal, and
+   the rest who don't know about it. This would result in a tie and two
+   different shared random value.
 
-   Let's consider Alice, a malicious directory authority. Alice can send her
-   reveal value to half the group and nothing to the other half thus
-   partitioning the authorities into two groups ultimately ending up with no
-   consensus at 24:00 since the SRV value is different between the two groups
-   and thus no majority.
+   A similar attack is possible. For example, two rounds before the end of the
+   reveal phase, Alice could advertise her reveal value to only half of the
+   dirauths. This way, in the last reveal phase round, half of the dirauths
+   will include that reveal value in their votes and the others will not. In
+   the end of the reveal phase, half of the dirauths will calculate a
+   different shared randomness value than the others.
 
-   This can be detected again by looking at the votes and if they are
-   different between authorities something is up.
+   We claim that this attack is not particularly fruitful: Alice ends up
+   having two shared random values to chose from which is a fundamental
+   problem of commit-and-reveal protocols as well (since the last person can
+   always abort or reveal). The attacker can also sabotage the consensus, but
+   there are other ways this can be done with the current voting system.
+
+   Furthermore, we claim that such an attack is very noisy and detectable.
+   First of all, it requires the authority to sabotage two consensuses which
+   will cause quite some noise. Furthermore, the authority needs to send
+   different votes to different auths which is detectable. Like the commit
+   phase attack, the detection here is to make sure that the commiment values
+   in a vote coming from an authority are always the same for each authority.
 
 6. Discussion
 
