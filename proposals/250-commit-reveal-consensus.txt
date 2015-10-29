@@ -419,7 +419,7 @@ Supersedes: 225
    possible to verify that they indeed correspond. This can be done as follows:
 
       TIMESTAMP_R || RN = base64-decode(REVEAL)
-      TIMESTAMP_C || COMMIT_SIG = base64-decode(COMMIT)
+      H(REVEAL) || TIMESTAMP_C || COMMIT_SIG = base64-decode(COMMIT)
 
       return ed25519-verify( pubkey=PUBKEY, sig=COMMIT_SIG,
                              msg=H(REVEAL) || TIMESTAMP_C )
