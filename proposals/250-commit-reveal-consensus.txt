@@ -615,7 +615,7 @@ Supersedes: 225
 4.3. Shared Random Value in Consensus [SRCONSENSUS]
 
    Authorities insert the two shared random values in the consensus following
-   the same encoding format as in [SRFORMAT].
+   the same encoding format as in [SRVOTE].
 
 5. Security Analysis
 
