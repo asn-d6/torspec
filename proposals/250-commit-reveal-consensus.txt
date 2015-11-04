@@ -411,25 +411,20 @@ Status: Draft
 
 4.1.2. Validating commitments and reveals [VALIDATEVALUES]
 
-   When authorities receive a COMMIT value, they need to verify the signature
-   and ensure that the TIMESTAMP field corresponds ot the current protocol run.
-   The same timestamp check should be done on REVEAL values. If an outdated
-   COMMIT or REVEAL value is found, it should be ignored.
+   When authorities receive a COMMIT value, they first need to verify its
+   signature using the right shared randomness ed25519 key (see [SRKEY]).
 
-   Given a COMMIT value, if you later receive its REVEAL value it should be
-   possible to verify that they indeed correspond. This can be done as follows:
+   Authorities also need to verify that the TIMESTAMP field corresponds to the
+   current protocol run.  The same timestamp check should be done on REVEAL
+   values. If an outdated COMMIT or REVEAL value is found, it should be
+   ignored. Corresponding COMMIT and REVEAL values MUST have the same timestamp
+   value.
 
-      TIMESTAMP_R || RN = base64-decode(REVEAL)
-      TIMESTAMP_C || COMMIT_SIG = base64-decode(COMMIT)
-
-      return ed25519-verify( pubkey=PUBKEY, sig=COMMIT_SIG,
-                             msg=H(REVEAL) || TIMESTAMP_C )
-
-      where PUBKEY is the public key of the shared randomness ed25519 key
-      [SRKEY] and H is the hashing algorithm "sha256".
-
-      TIMESTAMP_R must be equal to TIMESTAMP_C else REVEAL is an invalid value
-      for COMMIT.
+   Given a COMMIT message, if you later receive a REVEAL message it should be
+   possible to verify that they indeed correspond. To do so, the client extracts
+   the random value RN from the REVEAL message, hashes it, and compares it with
+   the H(REVEAL) from the COMMIT message. We say that the COMMIT and REVEAL
+   messages correspond, if the comparison was successful.
 
    Authorities should ignore reveal values during the Reveal Phase that don't
    correspond to commit values published during the Commitment Phase.
