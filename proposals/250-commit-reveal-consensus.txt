@@ -542,14 +542,6 @@ Status: Draft
         trusted. The validity time period is till the end of the current
         protocol run (the upcoming noon).
 
-    "ProtocolPhase" SP phase NL
-
-        [Exactly once]
-
-        The current protocol phase when this document is generated. The
-        accepted values are: "commit" and "reveal". This is mostly used for
-        human to be able to know that phase the state was last in.
-
    The following details the commitment and reveal section. They are encoded
    the same as in the vote. This makes it easier for implementation purposes.
 
