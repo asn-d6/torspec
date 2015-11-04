@@ -34,8 +34,7 @@ Status: Draft
             4.1.2. Validating commitments and reveals [VALIDATEVALUES]
             4.1.4. Encoding commit/reveal values in votes [COMMITVOTE]
             4.1.5. Shared Random Value [SRVOTE]
-            4.1.6. Conflict [COMMITCONFLICT]
-            4.1.7. Including the ed25519 shared randomness key in votes [SRKEY]
+            4.1.6. Including the ed25519 shared randomness key in votes [SRKEY]
          4.2. Persistent State
             4.2.1 Format [STATEFORMAT]
          4.3. Shared Random Value in Consensus [SRCONSENSUS]
@@ -224,7 +223,11 @@ Status: Draft
 
    The commit phase lasts for 12 hours, so authorities have multiple chances to
    commit their values. An authority MUST NOT commit a second value during a
-   subsequent round of the commit phase (see [COMMITCONFLICT]).
+   subsequent round of the commit phase.
+
+   if an authority publishes a second commitment value in the same
+   commit phase, only the first commitment should be taken in account
+   by other authorities. Any subsequent commitments MUST be ignored.
 
 3.1.2. Persistent State During Commitment Phase [STATECOMMIT]
 
@@ -257,11 +260,10 @@ Status: Draft
     - All the commitments and reveals received from other authorities.
     - The two previous shared random values produced by the protocol (if any).
 
-   The set of commitments have been decided during the commitment phase and
-   must remain the same. If an authority tries to change its commitment during
-   the reveal phase or introduce a new commitment, it should be flagged as a
-   conflict (see [COMMITCONFLICT]) and the authority should be ignored until
-   the next protocol run.
+   The set of commitments have been decided during the commitment
+   phase and must remain the same. If an authority tries to change its
+   commitment during the reveal phase or introduce a new commitment,
+   the new commitment MUST be ignored.
 
    Authorities during the first reveal round MUST verify that received votes
    contain the same commitments as the ones in their state (built during the
@@ -466,36 +468,7 @@ Status: Draft
   To maintain consistent ordering, the shared random values of the previous
   period should be listed before the values of the current period.
 
-4.1.6. Conflict [COMMITCONFLICT]
-
-   If an authority sees two distinct commitments from an other authority, that
-   authority is broken or evil: you include both commits, thereby proving
-   there is a conflict:
-
-      "shared-rand-conflict" SP identity SP commit1 SP commit2 NL
-
-   where "identity" is the base64 encoded commitment's authority fingerprint.
-   "commit1" is the previous commit that the authority had in its state and
-   "commit2" is the new received commit of the same period. Both commit values
-   are constructed as specified in section [COMMITREVEAL].
-
-   A conflict can occur if:
-      - An authority sends two different values during the commitment phase.
-      - An authority sends a new commit value during the reveal phase.
-      - A commit value seen by other authorities that doesn't match the value
-        in the authority's persistent state.
-
-   It is possible for an authority to vote multiple times in the same voting
-   period so only the latest commitment conflict should be added to the vote.
-   The point of this line is to notify that a conflict happened and not list
-   them all.
-
-   When a conflict line is seen in a vote, an authority should verify the
-   commit values (see [VALIDATEVALUES]) that they are in fact coming from the
-   authority identified by "identity" and if so, ignore that authority until
-   the next protocol run. If the conflict line is invalid, ignore it.
-
-4.1.7. Including the ed25519 shared randomness key in votes [SRKEY]
+4.1.6. Including the ed25519 shared randomness key in votes [SRKEY]
 
    We don't want to use the master or signing key of the dirauth to sign the
    commitments because those keys can also be kept offline for greater security.
@@ -588,12 +561,6 @@ Status: Draft
 
         This line is also used by an authority to store its own value.
 
-     "Conflict" SP identity SP commit1 SP commit2 NL
-
-        [At most once per authority if any]
-
-        The values are the same as detailed in section [COMMITCONFLICT].
-
    Finally is the shared random value section.
 
      "SharedRandPreviousValue" SP status SP value NL
@@ -649,7 +616,7 @@ Status: Draft
 
    This design is not immune to certain partition attacks. We believe they
    don't offer much gain to an attacker as they are very easy to detect and
-   difficult to pull off since an attacker would need to compromised a
+   difficult to pull off since an attacker would need to compromise a
    directory authority at the very least. Nevertheless, this section describes
    all possible partition attack and how to detect them.
 
@@ -662,13 +629,9 @@ Status: Draft
    the attacker, using this attack, could remove a single directory authority
    from the consensus decision at 24:00 when the SRV is computed.
 
-   If an attacker sends two different (or more) commit values either to
-   different authority in the same period or during the whole comit phase, a
-   conflict will be detected [COMMITCONFLICT]. Because of this conflict
-   mechanism, it's not possible to partition the authorities since ultimately
-   this authority will be ignored. All votes are broadcasted to others and
-   conflict line are carried through out the full protocol run (commit and
-   reveal phase).
+   An attacker could also partition the authorities by sending two
+   different commitment values to different authorities during the
+   commit phase.
 
    All of the above is fairly easy to detect. Commitment values in the vote
    coming from an authority should NEVER be different between authorities. If
