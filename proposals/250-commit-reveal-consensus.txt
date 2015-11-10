@@ -16,7 +16,6 @@ Supersedes: 225
          2.2. Commit & Reveal
          2.3. Consensus [CONS]
          2.4. Persistent State of the Protocol [STATE]
-         2.5. Protocol Illustration
       3. Protocol
          3.1 Commitment Phase [COMMITMENTPHASE]
             3.1.1. Voting During Commitment Phase
@@ -172,27 +171,6 @@ Supersedes: 225
    As discussed previously, the shared random values from the current and
    previous time period must also be present in the state at all times if they
    are available.
-
-2.5. Protocol Illustration
-
-   We have prepared an illustration to help you understand the protocol. You can
-   find it here:
-         https://people.torproject.org/~asn/hs_notes/shared_rand.jpg
-
-   For every hour, it shows the authority votes, the resulting state (SR) and
-   consensus. The chain 'A_1 -> c_1 -> r_1' denotes that the authority
-   committed to the value c_1 which corresponds to the reveal value r_1.
-
-   The illustration depicts the first 25 hours of running the protocol. It
-   starts with the very first commit round, then moves on to the second commit
-   round, and then skips directly to the last commit round. Then the reveal
-   phase starts, where we again show the first, second and last rounds.
-
-   After the reveal phase is done, we generate the shared randomness (SR_1)
-   and we start the new commit phase. The illustration finishes with the
-   second round of this new commit phase.
-
-   We advice you to revisit this after you have read the whole document.
 
 3. Protocol
 
