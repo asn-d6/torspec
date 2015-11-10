@@ -35,7 +35,7 @@ Supersedes: 225
             4.1.2. Validating commitments and reveals [VALIDATEVALUES]
             4.1.4. Encoding commit/reveal values in votes [COMMITVOTE]
             4.1.5. Shared Random Value [SRVOTE]
-            4.1.6. Including the ed25519 shared randomness key in votes [SRKEY]
+            4.1.6. Including the ed25519 identity key in votes [SRKEY]
          4.2. Persistent State
             4.2.1 Format [STATEFORMAT]
          4.3. Shared Random Value in Consensus [SRCONSENSUS]
@@ -127,14 +127,14 @@ Supersedes: 225
    everyday at 00:00UTC.
 
    In the beginning of that time period, each authority generates a new random
-   value and keeps it for the whole day. The authority cryptographically signs a
-   hash of the random value and calls the output its "commitment" value. The
-   original random value is called the "reveal" value.
+   value and keeps it for a whole day. The authority cryptographically hashes
+   the random value and calls the output its "commitment" value. The original
+   random value is called the "reveal" value.
 
    The idea is that given a reveal value you can cryptographically confirm that
-   it corresponds to a given commitment value. However given a commitment value
-   you should not be able to derive the underlying reveal value. The
-   construction of these values is specified in section [COMMITREVEAL].
+   it corresponds to a given commitment value (by hashing it). However given a
+   commitment value you should not be able to derive the underlying reveal
+   value. The construction of these values is specified in section [COMMITREVEAL].
 
 2.3. Consensus [CONS]
 
@@ -209,10 +209,9 @@ Supersedes: 225
    During this phase, an authority commits a value in its vote and
    saves it to the permanent state as well.
 
-   Authorities also save any received authoritative commits by other
-   authorities in their permanent state. We call a commit by Alice
-   "authoritative" if was signed by Alice's shared randomness key and
-   also included in Alice's vote.
+   Authorities also save any received authoritative commits by other authorities
+   in their permanent state. We call a commit by Alice "authoritative" if it was
+   included in Alice's vote.
 
 3.1.1. Voting During Commitment Phase
 
@@ -236,8 +235,6 @@ Supersedes: 225
 
     - The authoritative commitments (one per auth).
     - The two previous shared random values produced by the protocol (if any).
-
-   All received commitments MUST first be verified according to [VALIDATEVALUES].
 
    A commitment MUST only be transcribed to permanent state if and only if it
    is an authoritative commit.
@@ -316,9 +313,8 @@ Supersedes: 225
                 "shared-random" | INT_8(reveal_num) | INT_8(version) |
                 previous_SRV)
 
-   where the ID_a value is the base64 encoded SR key [SRKEY] of the directory
-   authority 'a' and R_a is the corresponding reveal value of that authority
-   for the current period.
+   where the ID_a value is the identity key fingerprint of authority 'a' and R_a
+   is the corresponding reveal value of that authority for the current period.
 
    Also, "reveal_num" is the number of revealed values in this construction,
    "version" is the protocol version number and "previous_SRV" is the previous
@@ -388,44 +384,26 @@ Supersedes: 225
    run. Authorities SHOULD generate a fresh pair of such values right before the
    first commitment phase of the day (at 00:00UTC).
 
-   The procedure is as follows:
-       1. Authority generates a fresh 256-bit random value RN.
-       2. Authority uses RN to derive REVEAL (see below).
-       3. Authority uses REVEAL to derive COMMIT (see below).
-
    The value REVEAL is computed as follows:
 
-      REVEAL = base64-encode( TIMESTAMP || RN )
+      REVEAL = base32-encode( TIMESTAMP || RN )
 
-      where RN is the 256-bit random value RN, and TIMESTAMP is a 64-bit Unix
-      timestamp that points to the current protocol run (so it's between 00:00
-      and 24:00 of that day).
+      where RN is a 256-bit random value.
 
    The value COMMIT is computed as follows:
 
-      SIGNATURE = ed25519-sign( privkey=PRIVKEY, msg=H(REVEAL) || TIMESTAMP )
-      COMMIT = base64-encode( H(REVEAL) || TIMESTAMP || SIGNATURE )
+      COMMIT = base32-encode( H(RN) || TIMESTAMP )
 
-      where the signature is performed using a special shared randomness ed25519
-      key [SRKEY]. TIMESTAMP MUST be the same as the one used for REVEAL.  H is
-      the hashing algorithm "sha256".
+      where H is the hashing algorithm "sha256", and RN is the random value from
+      REVEAL.
 
 4.1.2. Validating commitments and reveals [VALIDATEVALUES]
 
-   When authorities receive a COMMIT value, they first need to verify its
-   signature using the right shared randomness ed25519 key (see [SRKEY]).
-
-   Authorities also need to verify that the TIMESTAMP field corresponds to the
-   current protocol run.  The same timestamp check should be done on REVEAL
-   values. If an outdated COMMIT or REVEAL value is found, it should be
-   ignored. Corresponding COMMIT and REVEAL values MUST have the same timestamp
-   value.
-
-   Given a COMMIT message, if you later receive a REVEAL message it should be
-   possible to verify that they indeed correspond. To do so, the client extracts
-   the random value RN from the REVEAL message, hashes it, and compares it with
-   the H(REVEAL) from the COMMIT message. We say that the COMMIT and REVEAL
-   messages correspond, if the comparison was successful.
+   Given a COMMIT message and a REVEAL message it should be possible to verify
+   that they indeed correspond. To do so, the client extracts the random value
+   RN from the REVEAL message, hashes it, and compares it with the H(RN) from
+   the COMMIT message. We say that the COMMIT and REVEAL messages correspond, if
+   the comparison was successful.
 
    Authorities should ignore reveal values during the Reveal Phase that don't
    correspond to commit values published during the Commitment Phase.
@@ -438,12 +416,12 @@ Supersedes: 225
 
       "shared-rand-commitment" SP identity SP algname SP COMMIT [SP REVEAL] NL
 
-   where "identity" is the base64 encoded commitment's authority SR key
-   [SRKEY] and COMMIT is the received encoded commitment [COMMITREVEAL].
-   Authorities can also optionally include the encoded reveal value REVEAL.
-   There MUST be only one line per authority else the vote is considered
-   invalid. Finally, the "algname" is the hash algorithm that should be used
-   to compute COMMIT and REVEAL which is "sha256" for version 1.
+   where "identity" is the authority's identity key fingerprint and COMMIT is
+   the received encoded commitment [COMMITREVEAL].  Authorities can also
+   optionally include the encoded reveal value REVEAL.  There MUST be only one
+   line per authority else the vote is considered invalid. Finally, the
+   "algname" is the hash algorithm that should be used to compute COMMIT and
+   REVEAL which is "sha256" for version 1.
 
 4.1.5. Shared Random Value [SRVOTE]
 
@@ -466,21 +444,12 @@ Supersedes: 225
 
 4.1.6. Including the ed25519 shared randomness key in votes [SRKEY]
 
-   We don't want to use the master or signing key of the dirauth to sign the
-   commitments because those keys can also be kept offline for greater security.
+  We don't want to use the legacy RSA keys as part of the shared randomness
+  protocol since they are going to be deprecated soon.
 
-   Hence each dirauth will generate a special ed25519 key specifically for
-   shared randomness purposes. Its lifetime should be medium-term similar to the
-   lifetime of the signing key.
-
-   The shared randomness key needs to be included in the votes of each
-   authority, as well as the certificates required to bind it with the RSA
-   master key. We basically need the following chain:
-
-      [RSA master key -> ed25519 master key -> ed25519 signing key -> ed25519 shared randomness key]
-
-   To do so, we include the following two fields in vote documents as part
-   of the dir-source block:
+  For this reason we want each dirauth to include its ed25519 identity key in
+  its votes. To do so we include the following block in vote documents as part
+  of the dir-source block:
 
     "signing-ed25519" NL "-----BEGIN ED25519 CERT-----" NL certificate
            "-----END ED25519 CERT-----" NL
@@ -494,21 +463,6 @@ Supersedes: 225
         master signing key under the ed25519 master key. The certificate also
         includes the ed25519 master key in it certifying it under the RSA master
         key (since it's included in a vote which is signed by the RSA key).
-
-    "shared-random-ed25519" NL "-----BEGIN ED25519 CERT-----" NL certificate
-           "-----END ED25519 CERT-----" NL
-
-        [At most once]
-
-        The certificate is a base64-encoded Ed25519 certificate (see
-        cert-spec.txt) terminating =s removed.
-
-        The certificate has CERT_TYPE of [04] and it certifies the ed25519
-        shared randomness key under the ed25519 singing key.
-
-
-   This last certificate completes the chain and allows dirauths to extract the
-   ed25519 shared randomness key.
 
 4.2. Persistent State
 
