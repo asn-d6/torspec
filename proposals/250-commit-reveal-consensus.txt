@@ -337,7 +337,7 @@ Supersedes: 225
 
    Clients should keep on using this shared random values.
 
-p4. Specification [SPEC]
+4. Specification [SPEC]
 
 4.1 Voting
 
