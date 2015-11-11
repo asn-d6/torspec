@@ -35,8 +35,7 @@ Supersedes: 225
             4.1.4. Encoding commit/reveal values in votes [COMMITVOTE]
             4.1.5. Shared Random Value [SRVOTE]
             4.1.6. Including the ed25519 identity key in votes [SRKEY]
-         4.2. Persistent State
-            4.2.1 Format [STATEFORMAT]
+         4.2. Persistent state format [STATEFORMAT]
          4.3. Shared Random Value in Consensus [SRCONSENSUS]
       5. Security Analysis
          5.1. Security of commit-and-reveal and future directions
@@ -209,13 +208,9 @@ Supersedes: 225
 
 3.1.2. Persistent State During Commitment Phase [STATECOMMIT]
 
-   During the commitment phase, an authority state contains:
-
-    - The authoritative commitments (one per auth).
-    - The two previous shared random values produced by the protocol (if any).
-
-   A commitment MUST only be transcribed to permanent state if and only if it
-   is an authoritative commit.
+   During the commitment phase, authorities save in their persistent state the
+   authoritative commits they have received from each authority. Only one commit
+   per authority must be considered trusted and active at a given time.
 
    An authority that just received a commitment from another authority's vote
    MUST wait till the next voting round to include that commitment value in its
@@ -241,20 +236,12 @@ Supersedes: 225
    commitment during the reveal phase or introduce a new commitment,
    the new commitment MUST be ignored.
 
-   Authorities during the first reveal round MUST verify that received votes
-   contain the same commitments as the ones in their state (built during the
-   last commitment round).
-
 3.2.2. Persistent State During Reveal Phase [STATEREVEAL]
 
-   During the reveal phase, the state contains:
-
-    - The commitments agreed on during the commitment phase.
-    - The corresponding reveal values
-    - The two previous shared random values produced by this system (if any).
-
-   Reveal value MUST be verified and matched to a commitment value as
-   specified in [VALIDATEVALUES].
+   During the reveal phase, authorities keep the authoritative commits from the
+   commit phase in their persistent state. They also save any received reveals
+   that correspond to authoritative commits and are valid (as specified in
+   [VALIDATEVALUES]).
 
    An authority that just received a reveal value from another authority's vote,
    MUST wait till the next voting round before including that reveal value in
@@ -303,6 +290,9 @@ Supersedes: 225
 
    For protocol version 1, H is SHA256 and HMAC is HMAC-SHA256.
 
+   XXX We need to make sure that all dirauths know the previous_SRV here.
+       Otherwise, they might partition accidentally when calculating the SRV.
+
 3.4. Bootstrapping Procedure
 
    As described in [CONS], two shared random values are required for the HSDir
@@ -322,13 +312,15 @@ Supersedes: 225
    protocol if it returns before or during the Reveal Phase. The reveal value
    MUST be stored timestamped to avoid sending it on wrong protocol runs.
 
-   For this reason, other authorities should carry the commitment values of
-   absent authorities in their persistent state until the end of the protocol.
-
    An authority that misses the Commitment Phase cannot commit anymore, so it's
    unable to participate in the protocol for that run. Same goes for an
    authority that misses the Reveal phase. Authorities who do not participate in
    the protocol SHOULD still carry commits and reveals of others in their vote.
+
+   Finally, authorities MUST implement their persistent state in such a way that they
+   will never commit two different values in the same protocol run, even if they
+   have to reboot in the middle (assuming that their persistent state file is
+   kept). A suggested way to structure the persistent state is found at [STATEFORMAT].
 
 3.6. Shared Randomness Disaster Recovery [SRDISASTER]
 
@@ -345,7 +337,7 @@ Supersedes: 225
 
    Clients should keep on using this shared random values.
 
-4. Specification [SPEC]
+p4. Specification [SPEC]
 
 4.1 Voting
 
@@ -376,6 +368,11 @@ Supersedes: 225
       REVEAL.
 
 4.1.2. Validating commitments and reveals [VALIDATEVALUES]
+
+   Authorities need to verify that the TIMESTAMP field of commitments and
+   reveals corresponds to the current protocol run. If an outdated COMMIT or
+   REVEAL value is found, it should be ignored. Corresponding COMMIT and REVEAL
+   values MUST have the same timestamp value.
 
    Given a COMMIT message and a REVEAL message it should be possible to verify
    that they indeed correspond. To do so, the client extracts the random value
@@ -442,13 +439,11 @@ Supersedes: 225
         includes the ed25519 master key in it certifying it under the RSA master
         key (since it's included in a vote which is signed by the RSA key).
 
-4.2. Persistent State
+4.2. Persistent state format [STATEFORMAT]
 
    As a way to keep ground truth state in this protocol, an authority MUST
    keep a persistent state of the protocol. The next sub-section suggest a
    format for this state which is the same as the current state file format.
-
-4.2.1 Format [STATEFORMAT]
 
    It contains a preamble, a commitment and reveal section and a list of
    shared random values.
@@ -534,11 +529,13 @@ Supersedes: 225
 
 5.3 Partition attack
 
-   This design is not immune to certain partition attacks. We believe they
+   This design is not immune to certain partition attacks.  We believe they
    don't offer much gain to an attacker as they are very easy to detect and
-   difficult to pull off since an attacker would need to compromise a
-   directory authority at the very least. Nevertheless, this section describes
-   all possible partition attack and how to detect them.
+   difficult to pull off since an attacker would need to compromise a directory
+   authority at the very least. Also, because of the byzantine general problem,
+   it's very hard (even impossible in some cases) to protect against all such
+   attacks. Nevertheless, this section describes all possible partition attack
+   and how to detect them.
 
 5.3.1 During commit phase
 
