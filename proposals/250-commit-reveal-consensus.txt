@@ -358,7 +358,9 @@ Supersedes: 225
 
       REVEAL = base32-encode( TIMESTAMP || RN )
 
-      where RN is a 256-bit random value.
+      where RN is the sha256 hashed value of a 256-bit random value. We hash
+      the random value to avoid exposing raw bytes from our PRNG to the
+      network [RANDOM-REFS].
 
    The value COMMIT is computed as follows:
 
@@ -619,3 +621,9 @@ Supersedes: 225
    Theoretically, we could recover by calculating the shared randomness of the
    day at 01:00UTC instead. However, adding such fallback logic would
    complicate the protocol even further, so we have not yet considered it.
+
+References:
+
+[RANDOM-REFS]:
+   http://projectbullrun.org/dual-ec/ext-rand.html
+   https://lists.torproject.org/pipermail/tor-dev/2015-November/009954.html
