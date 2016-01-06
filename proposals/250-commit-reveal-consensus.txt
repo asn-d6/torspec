@@ -12,9 +12,9 @@ Supersedes: 225
          1.1. Motivation
          1.2. Previous work
       2. Overview
-         2.1. Ten thousand feet view
-         2.2. Commit & Reveal
-         2.3. Consensus [CONS]
+         2.1. Introduction to our commit-and-reveal protocol
+         2.2. Ten thousand feet view of the protocol
+         2.3. How we use the consensus [CONS]
             2.3.1. Inserting Shared Random Values in the consensus
          2.4. Persistent State of the Protocol [STATE]
       3. Protocol
@@ -89,7 +89,19 @@ Supersedes: 225
    The proposal also specifies how the final shared random value is embedded
    in consensus documents so that clients who need it can get it.
 
-2.1. Ten thousand feet view
+2.1. Introduction to our commit-and-reveal protocol
+
+   Every day, before voting for the consensus at 00:00UTC each authority
+   generates a new random value and keeps it for the whole day. The authority
+   cryptographically hashes the random value and calls the output its
+   "commitment" value. The original random value is called the "reveal" value.
+
+   The idea is that given a reveal value you can cryptographically confirm that
+   it corresponds to a given commitment value (by hashing it). However given a
+   commitment value you should not be able to derive the underlying reveal
+   value. The construction of these values is specified in section [COMMITREVEAL].
+
+2.1. Ten thousand feet view of the protocol
 
    Our commit-and-reveal protocol aims to produce a fresh shared random value
    everyday at 00:00UTC. The final fresh random value is embedded in the
@@ -118,21 +130,9 @@ Supersedes: 225
         At 00:00UTC, the shared random value is computed from the agreed
         revealed values and added to the consensus.
 
-   This concludes the commit-and-reveal procedure at 00:00UTC everyday.
+   This concludes the commit-and-reveal protocol at 00:00UTC everyday.
 
-2.2. Commit & Reveal
-
-   Every day, before voting for the consensus at 00:00UTC each authority
-   generates a new random value and keeps it for the whole day. The authority
-   cryptographically hashes the random value and calls the output its
-   "commitment" value. The original random value is called the "reveal" value.
-
-   The idea is that given a reveal value you can cryptographically confirm that
-   it corresponds to a given commitment value (by hashing it). However given a
-   commitment value you should not be able to derive the underlying reveal
-   value. The construction of these values is specified in section [COMMITREVEAL].
-
-2.3. Consensus [CONS]
+2.3. How we use the consensus [CONS]
 
    The produced shared random values needs to be readily available to
    clients. For this reason we include them in the consensus documents.
