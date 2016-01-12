@@ -17,6 +17,7 @@ Supersedes: 225
          2.3. How we use the consensus [CONS]
             2.3.1. Inserting Shared Random Values in the consensus
          2.4. Persistent State of the Protocol [STATE]
+         2.5. Protocol Illustration
       3. Protocol
          3.1 Commitment Phase [COMMITMENTPHASE]
             3.1.1. Voting During Commitment Phase
@@ -199,6 +200,28 @@ Supersedes: 225
    As discussed previously, the shared random values from the current and
    previous time period must also be present in the state at all times if they
    are available.
+
+2.5. Protocol Illustration
+
+   An illustration for better understanding the protocol can be found here:
+         https://people.torproject.org/~asn/hs_notes/shared_rand.jpg
+
+   It reads left-to-right.
+
+   The illustration displays what the authorities (A_1, A_2, A_3) put in their
+   votes. A chain 'A_1 -> c_1 -> r_1' denotes that authority A_1 committed to
+   the value c_1 which corresponds to the reveal value r_1.
+
+   The illustration depicts only a few rounds of the whole protocol. It starts
+   with the first three rounds of the commit phase, then it jumps to the last
+   round of the commit phase. It continues with the first two rounds of the
+   reveal phase and then it jumps to the final round of the protocol run. It
+   finally shows the first round of the commit phase of the next protocol run
+   (00:00UTC) where the final Shared Random Value is computed. In our fictional
+   example, the SRV was computed with 3 authority contributions and its value
+   is "a56fg39h".
+
+   We advice you to revisit this after you have read the whole document.
 
 3. Protocol
 
