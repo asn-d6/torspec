@@ -420,7 +420,7 @@ Supersedes: 225
    seen from the other authorities. To do so, it includes the following in its
    votes:
 
-      "shared-rand-commit" SP IDENTITY SP ALGNAME SP COMMIT [SP REVEAL] NL
+      "shared-rand-commit" SP ALGNAME SP IDENTITY SP COMMIT [SP REVEAL] NL
 
    where IDENTITY is the authority's SHA1 identity fingerprint and COMMIT is the
    encoded commit [COMMITREVEAL].  Authorities during the reveal phase can also
@@ -478,7 +478,7 @@ Supersedes: 225
    The following details the commitment and reveal section. They are encoded
    the same as in the vote. This makes it easier for implementation purposes.
 
-     "Commit" SP identity SP algname SP commit [SP reveal] NL
+     "Commit" SP algname SP identity SP commit [SP reveal] NL
 
         [Exactly once per authority]
 
