@@ -1662,6 +1662,11 @@
 
         [Any number for votes; does not occur in consensuses.]
 
+        AlgName ::= Any number of ASCII characters
+        Identity ::= 40 hexadecimal characters ([A-Fa-f0-9])
+        Commit ::= Base64-encoded-data
+        Reveal ::= Base64-encoded-data
+
         A commit of a directory authority for the shared randomness protocol,
         containing the commitment value and potentially also the reveal
         value. AlgName is the hash algorithm that is used and Identity is the
@@ -1673,13 +1678,19 @@
 
         [At most once.]
 
+        NumReveals ::= An integer greater or equal to 0.
+        Value ::= Base64-encoded-data
+
         The previous shared random value. Value is the actual shared random
         value encoded in base64. NumReveals is the number of commits used to
         generate this SRV.
 
-    "shared-rand-current-value" SP NUM_REVEALS SP VALUE NL
+    "shared-rand-current-value" SP NumReveals SP Value NL
 
         [At most once.]
+
+        NumReveals ::= An integer greater or equal to 0.
+        Value ::= Base64-encoded-data
 
         The current shared random value. Value is the actual shared random value
         encoded in base64. NumReveals is the number of commits used to generate
