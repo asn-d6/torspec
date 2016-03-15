@@ -1242,12 +1242,15 @@ Status: Draft
 
 3.1.4. Acknowledging establishment of introduction point [INTRO_ESTABLISHED]
 
-   After setting up an introduction circuit, the introduction point
-   reports its status back to the hidden service host with an empty
-   INTRO_ESTABLISHED cell.
+   After setting up an introduction circuit, the introduction point reports its
+   status back to the hidden service host with an empty INTRO_ESTABLISHED
+   cell. The INTRO_ESTABLISHED cell has the following contents:
 
-    [TODO: make this cell type extensible. It should be able to include
-    data if that turns out to be needed.]
+     N_EXTENSIONS [1 byte]
+     N_EXTENSIONS times:
+       EXT_FIELD_TYPE [1 byte]
+       EXT_FIELD_LEN  [1 byte]
+       EXT_FIELD      [EXT_FIELD_LEN bytes]
 
 3.2. Sending an INTRODUCE1 cell to the introduction point. [SEND_INTRO1]
 
