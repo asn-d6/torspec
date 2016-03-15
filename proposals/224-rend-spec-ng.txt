@@ -137,11 +137,11 @@ Status: Draft
 
       * Instantiate PK with Curve25519.
 
-      * Instantiate H with SHA256. [TODO: really?]
+      * Instantiate H with SHA3-256.
 
-      * Instantiate MAC with HMAC using H.
+      * Instantiate MAC(key=k, message=m) with H(k || m).
 
-      * Instantiate KDF with HKDF using H.
+      * Instantiate KDF with HKDF using SHAKE-256.
 
    For legacy purposes, we specify compatibility with older versions of
    the Tor introduction point and rendezvous point protocols. These used
@@ -1089,7 +1089,7 @@ Status: Draft
 
        [00, 01] -- Reserved for legacy introduction cells; see
                    [LEGACY_EST_INTRO below]
-       [02] -- Ed25519; HMAC-SHA256.
+       [02] -- Ed25519; SHA3-256.
        [FF] -- Reserved for maintenance messages on existing
                circuits; see MAINT_INTRO below.
 
