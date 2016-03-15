@@ -1400,10 +1400,9 @@ Status: Draft
    doesn't recognize; instead, it should use them verbatim in its EXTEND
    request to the rendezvous point.
 
-   The ONION_KEY_TYPE field is one of:
+   The ONION_KEY_TYPE field is:
 
-      [01] TAP-RSA-1024:  ONION_KEY is 128 bytes long.
-      [02] NTOR:          ONION_KEY is 32 bytes long.
+      [01] NTOR:          ONION_KEY is 32 bytes long.
 
    The ONION_KEY field describes the onion key that must be used when
    extending to the rendezvous point. It must be of a type listed as
