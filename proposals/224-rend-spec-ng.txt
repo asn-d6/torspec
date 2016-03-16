@@ -851,12 +851,16 @@ Status: Draft
    The format for a hidden service descriptor is as follows, using the
    meta-format from dir-spec.txt.
 
-     "hs-descriptor" SP version-number SP certificate NL
+     "hs-descriptor" SP version-number NL
 
        [At start, exactly once.]
 
        The version-number contains a positive integer indicating the version
        of the descriptor. Current version is "3".
+
+    "descriptor-signing-key-cert" SP certificate NL
+
+       [Exactly once.]
 
        The 'certificate' field contains a certificate in the format from
        proposal 220, with the short-term ed25519 descriptor-signing key
