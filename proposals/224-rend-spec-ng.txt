@@ -443,31 +443,12 @@ Status: Draft
 
 1.5. In more detail: Scaling to multiple hosts
 
-   [THIS SECTION IS UNFINISHED]
-
-   In order to allow multiple hosts to provide a single hidden service,
-   I'm considering two options.
-
-      * We can have each server build an introduction circuit to each
-        introduction point, and have the introduction points responsible
-        for round-robining between these circuits. One service host is
-        responsible for picking the introduction points and publishing
-        the descriptors.
-
-      * We can have servers choose their introduction points
-        independently, and build circuits to them. One service host is
-        responsible for combining these introduction points into a
-        single descriptor.
-
-   If we want to avoid having a single "master" host without which the
-   whole service goes down (the "one service host" in the description
-   above), we need a way to fail over from one host to another. We also
-   need a way to coordinate between the hosts. This is as yet
-   undesigned. Maybe it should use a hidden service?
-
-   See [SCALING-REFS] for discussion on this topic.
-
-   [TODO: Finalize this design.]
+   This design is compatible with our current approaches for scaling hidden
+   services. Specifically, hidden service operators can use onionbalance to
+   achieve high availability between multiple nodes on the HSDir
+   layer. Furthermore, operators can use proposal 255 to load balance their
+   hidden services on the introduction layer. See [SCALING-REFS] for further
+   discussions on this topic and alternative designs.
 
 1.6. In more detail: Backward compatibility with older hidden service
       protocols
