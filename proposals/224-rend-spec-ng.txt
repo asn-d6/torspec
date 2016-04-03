@@ -1154,16 +1154,10 @@ Status: Draft
    The KEY field is the ASN1-encoded legacy RSA public key that was also
    included in the hidden service descriptor.
 
-   The HANDSHAKE_AUTH field contains the SHA1 digest of (KH |
-   "INTRODUCE").
+   The HANDSHAKE_AUTH field contains the SHA1 digest of (KH | "INTRODUCE").
 
    The SIG field contains an RSA signature, using PKCS1 padding, of all
    earlier fields.
-
-   Note that since the relay payload itself may be no more than 498
-   bytes long, the KEY_LEN field can never have a first byte other
-   than [00] or [01]. These values are used to distinguish legacy
-   ESTABLISH_INTRO cells from newer ones.
 
    Older versions of Tor always use a 1024-bit RSA key for these introduction
    authentication keys. Newer hidden services MAY use RSA keys up 1904
@@ -1456,7 +1450,7 @@ Status: Draft
       t_hsmac    = PROTOID | ":hs_mac"
       m_hsexpand = PROTOID | ":hs_key_expand"
 
-   To make an INTRODUCE cell, the client must know a public encryption
+   To make an INTRODUCE1 cell, the client must know a public encryption
    key B for the hidden service on this introduction circuit. The client
    generates a single-use keypair:
              x,X = KEYGEN()
@@ -1557,7 +1551,7 @@ Status: Draft
 3.4.1. Password-based authentication.
 
    To authenticate with a password, the user must include an extension
-   field in the encrypted part of the INTRODUCE cell with an
+   field in the encrypted part of the INTRODUCE1 cell with an
    EXT_FIELD_TYPE type of [01] and the contents:
 
      Username [00] Password.
@@ -1570,7 +1564,7 @@ Status: Draft
 3.4.2. Ed25519-based authentication.
 
    To authenticate with an Ed25519 private key, the user must include an
-   extension field in the encrypted part of the INTRODUCE cell with an
+   extension field in the encrypted part of the INTRODUCE1 cell with an
    EXT_FIELD_TYPE type of [02] and the contents:
 
         Nonce     [16 bytes]
