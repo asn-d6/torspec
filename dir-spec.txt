@@ -1662,8 +1662,8 @@
 
         [Any number for votes; does not occur in consensuses.]
 
-        AlgName ::= Any number of ASCII characters
-        Identity ::= 40 hexadecimal characters ([A-Fa-f0-9])
+        AlgName ::= 1*(ALPHA / DIGIT / "_" / "-")
+        Identity ::= 40 * HEXDIG
         Commit ::= Base64-encoded-data
         Reveal ::= Base64-encoded-data
 
