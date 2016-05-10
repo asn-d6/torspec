@@ -910,14 +910,10 @@ Status: Draft
        MAC        MAC of both above fields        [32 bytes]
 
    The encryption format is ENCRYPTED =
-               STREAM(SECRET_IV,SECRET_KEY) xor Plaintext
+               STREAM(SECRET_IV,SECRET_KEY) XOR Plaintext
 
-   Before encryption, the plaintext must be padded to a multiple of ???
-   bytes with NUL bytes. The plaintext must not be longer than ???
-   bytes.  [TODO: how much? Should this be a parameter?  What values in
-   practice are needed to hide how many intro points we have, and how
-   many might be legacy ones? Note that Single Onion Services add extend
-   intro points as well. ]
+   Before encryption, the plaintext must be padded to a multiple of 4096 bytes
+   with NUL bytes.
 
    The plaintext format is:
 
@@ -953,7 +949,7 @@ Status: Draft
 
           [Exactly once per introduction point]
 
-          Base-64 encoded introduction point authentication key that was
+          Base64 encoded introduction point authentication key that was
           used to establish introduction point circuit, cross-certifying
           the blinded public key.  This uses the certificate format of
           proposal 220 with type [09].  The signing-key extension is
