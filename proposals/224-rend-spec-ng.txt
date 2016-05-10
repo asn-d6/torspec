@@ -1344,11 +1344,8 @@ Status: Draft
    described in [FMT_INTRO1] above, we have
 
             AUTH_KEY_TYPE               [1 byte]
-            AUTH_KEY_LEN                [1 byte]
+            AUTH_KEY_LEN                [2 bytes]
             AUTH_KEY                    [AUTH_KEY_LEN bytes]
-            ENC_KEY_TYPE                [1 byte]
-            ENC_KEY_LEN                 [1 byte]
-            ENC_KEY                     [ENC_KEY_LEN bytes]
             N_EXTENSIONS                [1 bytes]
             N_EXTENSIONS times:
                EXT_FIELD_TYPE           [1 byte]
@@ -1452,8 +1449,7 @@ Status: Draft
         "hidserv-userauth-ed25519"
         Nonce       (same as above)
         Pubkey      (same as above)
-        AUTH_KEYID  (As in the INTRODUCE1 cell)
-        ENC_KEYID   (As in the INTRODUCE1 cell)
+        AUTH_KEY    (As in the INTRODUCE1 cell)
 
    The hidden service host checks this by seeing whether it recognizes
    and would accept a signature from the provided public key. If it
