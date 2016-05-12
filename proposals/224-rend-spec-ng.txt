@@ -700,6 +700,8 @@ Table of contents:
    descriptor again to the responsible HSDirs for that time period.
    [TODO: Control republish period using a consensus parameter?]
 
+SECTION skew and overlap
+
    Furthermore, hidden services need to upload their descriptors to the HSDirs
    before the start of each time period, so that they are readily available for
    clients to fetch them. However, if every hidden service were to upload a new
