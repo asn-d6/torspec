@@ -1,4 +1,4 @@
-Working Title: prop259 redux^N
+Working Title: prop259 redux
 
 
 0.0. Preliminaries
@@ -33,7 +33,7 @@ X.0.  The guards listed in the current consensus.
 X.1.  The Sampled Guard Set.
 
    We maintain a set, SAMPLED_GUARDS, that persists across invocations
-   of Tor. It is an unordered subset set of the nodes that we have
+   of Tor. It is an unordered subset of the nodes that we have
    seen listed as a guard in the consensus at some point.  For each
    such guard, we record persistently:
 
@@ -54,6 +54,9 @@ X.1.  The Sampled Guard Set.
       - A 'last successfully connected through' time. Default 'never'.
       - An "is reachable" tristate, with possible values { yes, no,
         maybe }.  Default 'maybe'.
+
+        # ASN What's the point of 'yes'? Isn't 'yes' actually 'maybe'?
+          A guard that worked at one second, can actually fail the next second.
 
    We require that SAMPLED_GUARDS contain at least MIN_SAMPLE_FRACTION
    [previously SAMPLE_SET_THRESHOLD] of the number of guards in the
@@ -86,6 +89,11 @@ X.1.  The Sampled Guard Set.
    The first expiration mechanism prevents us from retaining members
    in SAMPLED_GUARDS that would fingerprint us. (????)
 
+   # ASN ^ Not sure if this is true. Having !IS_LISTED guards in our guard list
+     is not a fingerprint since we don't probe them. Maybe the rationale for
+     the first expiration mechanism is to keep our guard list from constantly
+     growing with useless nodes?
+
    The second expiration mechanism makes us rotate our guards slowly
    over time.
 
@@ -116,13 +124,12 @@ X.2. The Usable Sample
    We try to maintain a requirement that USABLE_FILTERED_GUARDS contain at
    least MIN_FILTERED_SAMPLE elements:
 
-      Whenever we are going to sample from USABLE_FILTERED_GUARDS, and it
+   Whenever we are going to sample from USABLE_FILTERED_GUARDS, and it
    contains fewer than MIN_FILTERED_SAMPLE elements, we add new
    elements to SAMPLED_GUARDS until one of the following is true:
      * USABLE_FILTERED_GUARDS is large enough,
    OR
      * SAMPLED_GUARDS is at its maximum size.
-
 
 X.Used. The confirmed-guard list. [xx formerly USED_GUARDS]
 
@@ -141,6 +148,8 @@ X.Used. The confirmed-guard list. [xx formerly USED_GUARDS]
   Whenever we remove a member from SAMPLED_GUARDS, we also remove it
   from CONFIRMED_GUARDS.
 
+  # XXX I feel that 'USED_GUARDS' is a more accurate name than CONFIRMED_GUARDS, maybe.
+
 X.3. The Primary guards
 
   We keep a run-time non-persistent ordered list of PRIMARY_GUARDS.
@@ -155,6 +164,9 @@ X.3. The Primary guards
 
   Note that PRIMARY_GUARDS do not have to be in
   USABLE_FILTERED_SAMPLE_GUARDS: they might be unreachable.
+
+  # ASN The FILTERED_SAMPLED_GUARDS identifier is not defined.
+    Maybe that's FILTERED_GUARDS? Which one do we prefer?
 
 X.4. Retrying guards.
 
@@ -171,9 +183,18 @@ X.4. Retrying guards.
 
 X.5. Selecting guards for circuits.
 
+  # ASN I feel that this proposal uses the same guard list input for all
+    circuits regardless of the type of circuit. For this to work, we need to
+    only consider guards that are Stable && Fast && V2Dir. Otherwise, a circuit
+    that requires a V2Dir might receive a guard that is not V2Dir.
+
   Every origin circuit is now "usable on completion" or "usable after
   retry" or "waiting for retry" or "complete".  You may only attach
   streams to "complete" circuits.
+
+  # ASN I like these circuit states! I think we should try to turn this into a
+    more formal state machine. USABLE_ON_COMPLETION, USABLE_AFTER_RETRY, etc.
+    Then maybe we should draw the state transitions.
 
   We keep, as transient state:
     * "last_time_on_internet" the last time at which we successfully
@@ -185,11 +206,18 @@ X.5. Selecting guards for circuits.
       or "yes", return one such guard _uniformly_ at random.  The
       circuit is "usable on completion".
 
+      # ASN: I think we should return primary guards in order, and not uniformly at random.
+        If the first primary guard actually works, we should ideally always pick that one.
+
+      # ASN: What about 'pending' when examining primary guards?
+
     * Otherwise, if the intersection of USABLE_FILTERED_SAMPLED_GUARDS
       and CONFIRMED_GUARDS is nonempty, return the first entry in that
       intersection that is not "pending". Make it "pending".  The
       circuit is "usable after retry".  (If all entries are "pending",
       pick the first "pending" one.)
+
+      # ASN Captain obvious, but the intersection should preserve the order of CONFIRMED_GUARDS here.
 
     * Otherwise, if there is no such entry, select a member at
       random from USABLE_FILTERED_SAMPLED_GUARDS. Make it "pending".
@@ -200,6 +228,8 @@ X.5. Selecting guards for circuits.
 
 X.6. When a circuit fails or succeeds.
 
+   # ASN Maybe we can split this into two sections. One for succeed, one for fail.
+
    When a circuit fails in a way that makes us conclude that a guard
    is not reachable, we take the following steps:
 
@@ -207,10 +237,14 @@ X.6. When a circuit fails or succeeds.
       * If it was "pending", we make it non-pending.
 
       * If this was a primary guard, and all primary guards now have
-        reachable status of "no", then mark all "usable on retry" circuits
+        reachable status of "no", then mark all "usable after retry" circuits
         as "usable on completion"; and also mark all "waiting for retry"
         circuits as "complete". (You may attach streams to
         them.)
+
+   # ASN Should we say here that after the circuit fails with this guard, we
+     need to restart the guard picking algorithm for this circuit? Or is this
+     handled by the layer above?
 
    When a circuit succeeds in a way that makes us conclude that a
    guard _was_ reachable, we take these steps:
@@ -219,23 +253,35 @@ X.6. When a circuit fails or succeeds.
       * We set its "last successfully connected through" time to
         "now".
       * If the guard was "pending", we add it to the end of
-        CONFIRMED_GUARDS.
+        CONFIRMED_GUARDS. ASN and clear pending?
 
       * If this was a primary guard, then close all "waiting for
         retry" circuits and all "usable after retry" circuits.
+
+        # ASN Should we also say "and restart the guard search for those
+          circuits?". Or do we leave this to the Tor circuit retry layer?
+
+        # ASN Do we update the state of the non-primary guards of the circuits
+          that we just ditched?
 
       * If this circuit was "usable on completion", close all "usable
         after retry" circuits.  This circuit is now "complete". You
         may attach streams to this circuit.
 
-      * If this circuit was "usable after retry", then check whether
-        the "last_used_internet" is more than
-        INTERNET_LIKELY_DOWN_INTERVAL seconds ago:
-           * If it is not, you may attach streams to this circuit.
+        # ASN Hm. What is this rule about? Isn't the rule above also covering this one?
+              See end of document for a state transition problem based on this rule.
 
-           * If it is, then mark all PRIMARY_GUARDS as "maybe"
-             reachable.  You may not yet attach streams to this
-             circuit. It is "waiting for retry".
+      * If this circuit was "usable after retry", then check whether
+        the "last_seen_internet" is more than
+        INTERNET_LIKELY_DOWN_INTERVAL seconds ago:
+           * If it is not, you may attach streams to this circuit. # ASN aka "mark it 'complete'"?
+
+           * If it is, then mark all PRIMARY_GUARDS as "maybe" reachable.  You
+             may not yet attach streams to this circuit. It is "waiting for
+             retry".
+
+             # ASN ^ Maybe we should mention that after we mark primary guards as
+               retriable we need to restart the search?
 
 
 X.7.  Whenever we get a new consensus.
@@ -290,3 +336,16 @@ B.1. Still non-addressed issues
    More rationales everywhere.
 
    Restore the nice motivation/etc sections from one of the old prop259s.
+
+
+# ASN Here is a case where the state machine does not work very well:
+
+  Imagine the following guard list: | PRIMARY_GUARD_1 | PRIMARY_GUARD_2 | PRIMARY_GUARD_3 | GUARD_1 | GUARD_2 | GUARD_3
+  Imagine that PRIMARY_GUARD_1 and PRIMARY_GUARD_2 are marked as unreachable.
+
+  a) Circuit A asks for guard. Receives PRIMARY_GUARD_3 and set state to USABLE_ON_COMPLETION.
+  b) Circuit B asks for guard. Receives GUARD_1 (since PRIMARY_GUARD_3 is pending) and set state to USABLE_AFTER_RETRY.
+  c) Circuit A fails to connect to PRIMARY_GUARD_3. All primary guards are unreachable, hence Circuit B is set to USABLE_ON_COMPLETION.
+  d) Circuit A asks for guard. Receives GUARD_2 (since GUARD_1 is pending) and set state to USABLE_AFTER_RETRY.
+  e) Circuit B connects to GUARD_1. Since its USABLE_ON_COMPLETION, we close all USABLE_AFTER_RETRY circuits including Circuit A.
+  f) Circuit A asks for another guard. Receives GUARD_2 again? Or maybe GUARD_3? In any case, this is suboptimal.
