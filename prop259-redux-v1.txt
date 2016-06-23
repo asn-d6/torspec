@@ -1,0 +1,292 @@
+Working Title: prop259 redux^N
+
+
+0.0. Preliminaries
+
+   Nick wrote this; it isn't done yet.
+
+   It is derived from the following, by Isis Lovecruft, George
+   Kadianakis, and Ola Bini:
+
+     https://raw.githubusercontent.com/twstrike/torspec/review/proposals/259-guard-selection.txt
+
+   It is in part a restatement of it, in part a simplification, and in
+   part a refactoring so that it does not have the serialization
+   problems noted by George Kadianakis.  It makes other numerous small
+   changes.
+
+   This document attempts to describe the algorithm in terms of data
+   flows.
+
+   Whenever I say "Y is a subset of X" you can think in terms of
+   "Y-membership is a flag that can be set on members of X" or
+   "Y-membership is a predicate that can be evaluated on members of
+   X."
+
+   "More work is needed."  There's a to-do at the end of the document.
+
+
+X.0.  The guards listed in the current consensus.
+
+   By GUARDS we mean the set of all guards in the current consensus.
+
+X.1.  The Sampled Guard Set.
+
+   We maintain a set, SAMPLED_GUARDS, that persists across invocations
+   of Tor. It is an unordered subset set of the nodes that we have
+   seen listed as a guard in the consensus at some point.  For each
+   such guard, we record persistently:
+
+      - ADDED_ON_DATE: The date on which it was added to
+        sampled_guards
+      - ADDED_BY_VERSION: The version of Tor that added it to
+        sampled_guards
+      - IS_LISTED: Whether it was listed as a usable Guard in the
+        _most recent_ consensus we have seen.
+      - FIRST_UNLISTED_AT: If IS_LISTED is false, the publication date
+        of the earliest consensus in which this guard was listed such
+        that we have not seen it listed in any later consensus.
+        Otherwise "None."
+
+   For each guard in SAMPLED_GUARDS, we also record this data,
+   non-persistently:
+      - A 'last tried to connect at' time.  Default 'never'.
+      - A 'last successfully connected through' time. Default 'never'.
+      - An "is reachable" tristate, with possible values { yes, no,
+        maybe }.  Default 'maybe'.
+
+   We require that SAMPLED_GUARDS contain at least MIN_SAMPLE_FRACTION
+   [previously SAMPLE_SET_THRESHOLD] of the number of guards in the
+   consensus, but not more than MAX_SAMPLE_FRACTION [previously
+   MAXIMUM_SAMPLE_SIZE_THRESHOLD] of the number of guards in the
+   consensus.
+
+   To add a new guard to SAMPLED_GUARDS, pick an entry at random from
+   GUARDS - SAMPLED_GUARDS, weighted by bandwidth.
+
+   We remove an entry from SAMPLED_GUARDS if:
+
+      * We have a live consensus, and IS_LISTED is false, and
+        FIRST_UNLISTED_AT is over REMOVE_UNLISTED_GUARDS_AFTER
+        [previously ENTRY_GUARD_REMOVE_AFTER] days in the past.
+   OR
+      * We have a live consensus, and we cannot parse
+        ADDED_BY_VERSION, or ADDED_ON_DATE is over GUARD_LIFETIME ago.
+
+   Note that SAMPLED_GUARDS does not depend on our configuration.  It
+   is possible that we can't actually connect to any of these guards.
+
+
+     **Rationale**
+
+   The Sampled guard set is meant to limit the total number of guards
+   that a client will connect to in a given period.  The upper limit
+   on its size prevents us from considering too many guards.
+
+   The first expiration mechanism prevents us from retaining members
+   in SAMPLED_GUARDS that would fingerprint us. (????)
+
+   The second expiration mechanism makes us rotate our guards slowly
+   over time.
+
+
+X.2. The Usable Sample
+
+   We maintain another set, FILTERED_GUARDS, that does not persist. It
+   is derived from:
+       - SAMPLED_GUARDS
+       - our current configuration,
+       - the path bias information.
+
+   A guard is a member of FILTERED_GUARDS if and only if all of the
+   following are true: [previously IS_LIVE]
+
+       - It is a member of SAMPLED_GUARDS, with IS_LISTED set to true.
+       - It is not disabled because of path bias issues.
+       - [XX bad_since???]
+       - [XX usable descriptor??]
+       - It is not disabled because of ReachableAddress policy [XX??]
+       - It is not disabled because of ExcludeNodes.
+       - It is a general-purpose router, not a bridge. [XX usebridges]
+
+   We have an additional subset, USABLE_FILTERED_GUARDS, which is
+   defined to be the subset of FILTERED_GUARDS where "is reachable" is
+   "yes" or "maybe".
+
+   We try to maintain a requirement that USABLE_FILTERED_GUARDS contain at
+   least MIN_FILTERED_SAMPLE elements:
+
+      Whenever we are going to sample from USABLE_FILTERED_GUARDS, and it
+   contains fewer than MIN_FILTERED_SAMPLE elements, we add new
+   elements to SAMPLED_GUARDS until one of the following is true:
+     * USABLE_FILTERED_GUARDS is large enough,
+   OR
+     * SAMPLED_GUARDS is at its maximum size.
+
+
+X.Used. The confirmed-guard list. [xx formerly USED_GUARDS]
+
+  We maintain a persistent ordered list, CONFIRMED_GUARDS.  It contains
+  guards that we have used before, in our preference order of using
+  them.  It is a subset of SAMPLED_GUARDS.  For each guard in this
+  list, we store persistently:
+      - Its fingerprint
+
+  For each guard on this list, we also store non-persistently:
+      - A "pending" flag.
+
+  We add new members to CONFIRMED_GUARDS when we mark a circuit built
+  through one as "for user traffic."
+
+  Whenever we remove a member from SAMPLED_GUARDS, we also remove it
+  from CONFIRMED_GUARDS.
+
+X.3. The Primary guards
+
+  We keep a run-time non-persistent ordered list of PRIMARY_GUARDS.
+  It is a subset of FILTERED_SAMPLED_GUARDS.  It contains N_PRIMARY_GUARDS
+  elements.
+
+  To compute primary guards, take the intersection of CONFIRMED_GUARDS and
+  FILTERED_SAMPLED_GUARDS, and take the first N_PRIMARY_GUARDS
+  elements.  If there are fewer than N_PRIMARY_GUARDS elements, add
+  additional elements to PRIMARY_GUARDS chosen _uniformly_ at random
+  from (FILTERED_SAMPLED_GUARDS - CONFIRMED_GUARDS).
+
+  Note that PRIMARY_GUARDS do not have to be in
+  USABLE_FILTERED_SAMPLE_GUARDS: they might be unreachable.
+
+X.4. Retrying guards.
+
+  (We run this process as frequently as needed. It can be done once a
+  second, or just-in-time.)
+
+  If a primary sampled guard's "reachable" status is "no", and its 'last tried
+  to connect at time' is greater than PRIMARY_GUARDS_RETRY_INTERVAL
+  ago, we change its "reachable" status to "maybe".
+
+  If a non-primary sampled guard's "reachable" status is "no" and its 'last
+  tried to connect at time' is greater than GUARDS_RETRY_INTERVAL ago,
+  we change its "reachable" status to "maybe".
+
+X.5. Selecting guards for circuits.
+
+  Every origin circuit is now "usable on completion" or "usable after
+  retry" or "waiting for retry" or "complete".  You may only attach
+  streams to "complete" circuits.
+
+  We keep, as transient state:
+    * "last_time_on_internet" the last time at which we successfully
+      used a circuit or connected to a guard.
+
+  When we want to build a circuit, and we need to pick a guard:
+
+    * If any entry in PRIMARY_GUARDS has "reachable" status of "maybe"
+      or "yes", return one such guard _uniformly_ at random.  The
+      circuit is "usable on completion".
+
+    * Otherwise, if the intersection of USABLE_FILTERED_SAMPLED_GUARDS
+      and CONFIRMED_GUARDS is nonempty, return the first entry in that
+      intersection that is not "pending". Make it "pending".  The
+      circuit is "usable after retry".  (If all entries are "pending",
+      pick the first "pending" one.)
+
+    * Otherwise, if there is no such entry, select a member at
+      random from USABLE_FILTERED_SAMPLED_GUARDS. Make it "pending".
+      The circuit is "usable after retry."
+
+  We update the 'last tried to connect at' time for the guard to
+  'now.'
+
+X.6. When a circuit fails or succeeds.
+
+   When a circuit fails in a way that makes us conclude that a guard
+   is not reachable, we take the following steps:
+
+      * We set its "reachable" status to "no".
+      * If it was "pending", we make it non-pending.
+
+      * If this was a primary guard, and all primary guards now have
+        reachable status of "no", then mark all "usable on retry" circuits
+        as "usable on completion"; and also mark all "waiting for retry"
+        circuits as "complete". (You may attach streams to
+        them.)
+
+   When a circuit succeeds in a way that makes us conclude that a
+   guard _was_ reachable, we take these steps:
+
+      * We set its "reachable" status to "yes".
+      * We set its "last successfully connected through" time to
+        "now".
+      * If the guard was "pending", we add it to the end of
+        CONFIRMED_GUARDS.
+
+      * If this was a primary guard, then close all "waiting for
+        retry" circuits and all "usable after retry" circuits.
+
+      * If this circuit was "usable on completion", close all "usable
+        after retry" circuits.  This circuit is now "complete". You
+        may attach streams to this circuit.
+
+      * If this circuit was "usable after retry", then check whether
+        the "last_used_internet" is more than
+        INTERNET_LIKELY_DOWN_INTERVAL seconds ago:
+           * If it is not, you may attach streams to this circuit.
+
+           * If it is, then mark all PRIMARY_GUARDS as "maybe"
+             reachable.  You may not yet attach streams to this
+             circuit. It is "waiting for retry".
+
+
+X.7.  Whenever we get a new consensus.
+
+   We update GUARDS.
+
+   For every guard in SAMPLED_GUARDS, we update IS_LISTED and
+   FIRST_UNLISTED_AT.
+
+   [**] We remove entries from SAMPLED_GUARDS if appropriate,
+   according to the sampled-guards expiration rules.  If they were in
+   CONFIRMED_GUARDS, we also remove them from USED_GUARDS.
+
+   We recompute FILTERED_GUARDS, and everything that derives from it.
+
+   (Whenever one of the configuration options that affects the filter
+   is updated, we repeat the process above, starting at the [**] line.)
+
+A.1.  Parameters
+
+   MIN_SAMPLE_FRACTION
+
+   MAX_SAMPLE_FRACTION
+
+   GUARD_LIFETIME
+
+   REMOVE_UNLISTED_GUARDS_AFTER.
+
+   MIN_FILTERED_SAMPLE
+
+   N_PRIMARY_GUARDS
+
+   PRIMARY_GUARDS_RETRY_INTERVAL
+
+   GUARDS_RETRY_INTERVAL
+
+   INTERNET_LIKELY_DOWN_INTERVAL
+
+
+B.1. Still non-addressed issues
+
+   Simulating actual behavior of the above.
+
+   Formats to use when making information persistent
+
+   Will this work in a dystopic world?
+
+   UseBridges behavior
+
+   EntryNodes behavior
+
+   More rationales everywhere.
+
+   Restore the nice motivation/etc sections from one of the old prop259s.
