@@ -428,17 +428,15 @@ Table of contents:
 
    In order to download a descriptor, clients must know which blinded
    signing key was used to sign it. (See the next section for more info
-   on key blinding.)  This blinded signing key is derived from the
-   service's public key and, optionally, an additional secret that is
-   not part of the hidden service's onion address. The public key and
-   this secret together constitute the service's "credential".
+   on key blinding.)
 
-   When the secret is in use, the hidden service gains protections
-   equivalent to the "stealth mode" in previous designs.
-
-   To learn the introduction points, the clients must decrypt the body
-   of the hidden service descriptor. The encryption key for these is
-   derived from the service's credential.
+   To learn the introduction points, clients must decrypt the body of the
+   hidden service descriptor. To do so, clients must know the _unblinded_
+   public key of the service, which makes the descriptor unuseable by entities
+   without that knowledge (e.g. HSDirs that don't know the onion address).
+   Also, if client authorization is enabled, we use a per-client pre-shared key
+   (client_auth_cookie) to encrypt the descriptor, to further ensure that
+   unauthorized entities cannot decrypt it.
 
    In order to make the introduction point send a rendezvous request to the
    service, the client needs to use the per-introduction-point authentication
@@ -635,12 +633,10 @@ Table of contents:
 
    In the above formula, credential corresponds to:
 
-       credential = H(public-identity-key | authorization-key)
+       credential = H("credential" || public-identity-key)
 
    where public-identity-key is the public identity master key of the hidden
-   service, and authorization-key is an optional secret used for client
-   authorization. If no client authorization is specified, authorization-key is
-   left blank.
+   service.
 
 2.2. Locating, uploading, and downloading hidden service descriptors
        [HASHRING]
@@ -931,6 +927,17 @@ Table of contents:
        prevents an attacker from replacing a newer descriptor signed by
        a given key with a copy of an older version.)
 
+     "client-auth-desc-key" SP blob NL
+
+       [At most once]
+
+       When client authorization is in place, this blob includes an additional
+       descriptor encryption key (descriptor cookie), which can only be
+       retrieved by authorized clients, such that only authorized clients can
+       actually decrypt the descriptor. The blob is base-64 encoded and
+       enclosed in -----BEGIN MESSAGE---- and ----END MESSAGE---- wrappers.
+       See [CLIENTAUTHCOOKIE] for the contents of the blob.
+
      "encrypted" NL encrypted-string
 
        [Exactly once.]
@@ -949,6 +956,50 @@ Table of contents:
        the hidden service host does not need to have its private blinded key
        online.
 
+2.4.1. Descriptor cookies for client authorization [CLIENTAUTHCOOKIE]
+
+    This section specifies the contents of the "client-auth-desc-key"
+    descriptor field when client authorization is enabled.
+
+    Since client authorization is enabled, we assume that each authorized
+    client knows a pre-shared symmetric key called client_auth_cookie. Each
+    client has their own unique client_auth_cookie.
+
+    The goal here is to generate a fresh descriptor_cookie key, and encrypt it
+    to each authorized client's individual client_auth_cookie key. Here is the
+    format of "client-auth-desc-key":
+
+      AUTH_TYPE                            [1 byte]
+      NONCE                                [8 bytes]
+      NUMBER_OF_BLOCKS                     [1 byte]
+      foreach authorized client:
+              CLIENT_ID                    [4 bytes]
+              ENCRYPTED_DESC_COOKIE        [16 bytes]
+      PADDING                              [up to block size]
+
+      where:
+
+        AUTH_TYPE is the authentication type (value 0x01 in this case)
+        NONCE is 8 random bytes (used to obfuscate CLIENT_ID)
+
+        NUMBER_OF_BLOCKS is the number of authorized clients rounded up to the
+        nearest multiple of 16. Hence, each block fits 20*16 bytes. We use
+        these blocks to obfuscate the number of authorized clients by adding
+        padding in the end.
+
+        CLIENT_ID is H(client_auth_cookie || NONCE) for each client
+        ENCRYPTED_DESC_COOKIE is the descriptor_cookie encrypted using this
+        client's client_auth_cookie.
+
+        Finally, PADDING is filled with random bytes till the end of the block
+        (each block is 20*16 bytes).
+
+    An authorized client parsing a "client-auth-desc-key" blob, needs to use
+    the NONCE to derive its CLIENT_ID, and then needs to search the blob for
+    that CLIENT_ID to find the ciphertext of the descriptor cookie. After
+    decrypting the descriptor cookie, it uses it to calculate the descriptor
+    encryption keys as specified in [ENCRYPTED-DATA] below.
+
 2.5. Hidden service descriptors: encryption format [ENCRYPTED-DATA]
 
    The encrypted part of the hidden service descriptor is encrypted and
@@ -958,7 +1009,11 @@ Table of contents:
               descriptor even if the content of the descriptor hasn't changed.
               (So that we don't leak whether the intro point list etc. changed)
 
-       secret_input = blinded_public_key | subcredential | INT_8(revision_counter)
+       secret_input = blinded_public_key | subcredential | INT_8(revision_counter) | descriptor_cookie
+
+              where descriptor_cookie is as specified in [CLIENTAUTHCOOKIE] or
+              empty if client authorization is not enabled.
+
        keys = KDF(secret_input, salt, "hsdir-encrypted-data",
                   S_KEY_LEN + S_IV_LEN + MAC_KEY_LEN)
 
@@ -1056,7 +1111,6 @@ Table of contents:
    clients should ignore unrecognized lines in the descriptor.
    Other encryption and authentication key formats are allowed; clients
    should ignore ones they do not recognize.
-
 
 3. The introduction protocol
 
