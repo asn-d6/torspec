@@ -609,7 +609,7 @@ Table of contents:
 
 2.1. Deriving blinded keys and subcredentials [SUBCRED]
 
-   In each time period (see [TIME-PERIOD] for a definition of time
+   In each time period (see [TIME-PERIODS] for a definition of time
    periods), a hidden service host uses a different blinded private key
    to sign its directory information, and clients use a different
    blinded public key as the index for fetching that information.
@@ -628,7 +628,10 @@ Table of contents:
 
    The subcredential for a period is derived as:
 
-       subcredential = H("subcredential" | credential | blinded-public-key).
+       subcredential = H("subcredential" |
+                         credential | blinded-public-key | INT_8(period_num))
+
+       where period_num is calculated as specified in [TIME-PERIODS].
 
    In the above formula, credential corresponds to:
 
