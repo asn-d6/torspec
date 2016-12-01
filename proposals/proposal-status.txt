@@ -530,7 +530,7 @@ again to remind me!
      Specifies an improved guard-picking algorithm that is capable of defending
      against targetted attacks.
 
-272  Listed routers should be Valid, Running, and treated as such
+272  Listed routers should be Valid, Running, and treated as such [FINISHED]
 
      This proposal describes a change in how clients understand consensus
      flags, and how authorities vote on consensuses.
