@@ -2074,7 +2074,37 @@ Appendix E. Reserved numbers
       Note: The value "0A" is skipped because it's reserved for the onion key
             cross-certifying ntor identity key from proposal 228.
 
-Appendix F. Managing authorized client data [CLIENT-AUTH-MGMT]
+Appendix F. Hidden service directory format [HIDSERVDIR-FORMAT]
+
+  This appendix section specifies the contents of the HiddenServiceDir directory:
+
+  - "hostname"                                       [FILE]
+
+   This file contains the onion address of the onion service.
+
+  - "private_key_ed25519"                            [FILE]
+
+   This file contains the private master ed25519 key of the onion service.
+   [TODO: Offline keys]
+
+  - "client_authorized_pubkeys"                      [FILE]
+
+   If client authorization is _enabled_, this is a newline-separated file of
+   "<client name> <pubkeys> entries for authorized clients. You can think of it
+   as the ~/.ssh/authorized_keys of onion services. See [CLIENT-AUTH-MGMT] for
+   more details.
+
+  - "./client_authorized_privkeys/"                  [DIRECTORY]
+    "./client_authorized_privkeys/alice.privkey"     [FILE]
+    "./client_authorized_privkeys/bob.privkey"       [FILE]
+    "./client_authorized_privkeys/charlie.privkey"   [FILE]
+
+   If client authorization is _enabled_ _AND_ if the hidden service is
+   responsible for generating and distributing private keys for its clients,
+   then this directory contains files with client's private keys. See
+   [CLIENT-AUTH-MGMT] for more details.
+
+Appendix E. Managing authorized client data [CLIENT-AUTH-MGMT]
 
   Hidden services and clients can configure their authorized client data either
   using the torrc, or using the control port. This section presents a suggested
