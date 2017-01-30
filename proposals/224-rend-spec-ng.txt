@@ -2108,11 +2108,12 @@ Appendix E. Managing authorized client data [CLIENT-AUTH-MGMT]
 
   Hidden services and clients can configure their authorized client data either
   using the torrc, or using the control port. This section presents a suggested
-  scheme for configuring client authorization.
+  scheme for configuring client authorization. Please see appendix
+  [HIDSERVDIR-FORMAT] for more information about relevant hidden service files.
 
-  F.1. Configuring client authorization using torrc
+  E.1. Configuring client authorization using torrc
 
-  F.1.1. Hidden Service side
+  E.1.1. Hidden Service side
 
 	  A hidden service that wants to perform client authorization, adds a new
 	  option HiddenServiceAuthorizeClient to its torrc file:
@@ -2123,29 +2124,24 @@ Appendix E. Managing authorized client data [CLIENT-AUTH-MGMT]
 	  section [CLIENT-AUTH]. The rest of the line is a comma-separated list of
 	  human-readable authorized client names.
 
-	  Let's consider that one of the listed client names is "alice". In this case,
-	  Tor checks the directory at "DataDirectory/hidden_service/client_auth/" for
-	  any files with filename alice.key or alice.pub .
+	  Let's consider that one of the listed client names is "alice". In this
+	  case, Tor checks the "client_authorized_pubkeys" file for any entries
+	  with client_name being "alice". If an "alice" entry is found, we use the
+	  relevant pubkeys to authenticate Alice.
 
-	  Files ending in .key contain private keys for authorized clients, whereas
-	  .pub files contain public keys for authorized clients. In general, authorized
-	  clients should send their public keys to the hidden service operator, and the
-	  operator should place them in the filesystem as .pub files. Only .pub files
-	  are useful to the hidden service, whereas .key files are there only if the
-	  hidden service had to generate its client's keypairs as described below.
+	  If no "alice" entry is found in the "client_authorized_pubkeys" file, Tor
+	  is tasked with generating public/private keys for Alice. To do so, Tor
+	  generates x25519 and ed25519 keypairs for Alice, then makes a
+	  "client_authorized_privkeys/alice.privkey" file and writes the private
+	  keys inside; it also adds an entry for alice to the
+	  "client_authorized_pubkeys" file.
 
-	  If no alice.key or alice.pub files exist, Tor is tasked with generating
-	  client keys for Alice. To do so, Tor generates x25519 and ed25519 keypairs
-	  for Alice, then makes an alice.key file and writes the private keys inside;
-	  it also makes an alice.pub file and writes the public keys inside.
-	  [XXX what format? it should be convenient so that client can just copy-paste]
+	  In this last case, the hidden service operator has the responsibility to
+	  pass the .key file to Alice in a secure out-of-band way. After the file
+	  is passed to Alice, it can be shredded from the filesystem, as only the
+	  public keys are required for the hidden service to function.
 
-	  In this case, the hidden service operator has the responsibility to pass the
-	  .key file to Alice in a secure out-of-band way. After the file is passed to
-	  Alice, it can be shredded from the filesystem, as only the public keys are
-	  required for the hidden service to function.
-
-  F.1.2. Client side
+  E.1.2. Client side
 
 	  A client who wants to register client authorization data for a hidden service
 	  needs to add the following line to their torrc:
@@ -2158,9 +2154,9 @@ Appendix E. Managing authorized client data [CLIENT-AUTH-MGMT]
 	  In the former case, the client is also tasked with transfering the public
 	  keys to the hidden service in a secure out-of-band way.
 
-  F.2. Configuring client authorization using the control port
+  E.2. Configuring client authorization using the control port
 
-  F.2.1. Service side
+  E.2.1. Service side
 
 	  A hidden service also has the option to configure authorized clients
 	  using the control port. The idea is that hidden service operators can use
@@ -2175,7 +2171,7 @@ Appendix E. Managing authorized client data [CLIENT-AUTH-MGMT]
 	  Hidden services who use the control port interface for client auth need
 	  to perform their own key management.
 
-  F.2.2. Client side
+  E.2.2. Client side
 
 	  There should also be a control port interface for clients to register
 	  authorization data for hidden services without having to use the
