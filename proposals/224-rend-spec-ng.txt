@@ -1180,6 +1180,19 @@ Table of contents:
       tor-spec.txt. See tor-spec section 5.1 for a list of recognized
       handshake types.
 
+     "canonical-onion-addr" SP addr-str NL
+
+      [None or at most once]
+
+      If present, this line contains a string representation of the actual
+      long-term address of this onion service. If present, clients MUST verify
+      that they reached this onion service using the canonical onion address
+      specified here, to avoid downgrade or replay attacks that reuse
+      legitimate descriptors (see [PHISHING-REFS] for more details).
+
+      Example:
+       "canonical-onion-addr l5satjgud6gucryazcyvyvhuxhr74u6ygigiuyixe3a6ysis67ororad.onion\n"
+
      "intro-auth-required" SP types NL
 
       [At most once]
@@ -1976,6 +1989,10 @@ References:
 
 [ONIONADDRESS-REFS]:
         https://lists.torproject.org/pipermail/tor-dev/2017-January/011816.html
+
+[PHISHING-REFS]:
+        https://lists.torproject.org/pipermail/tor-dev/2017-March/012030.html
+        https://lists.torproject.org/pipermail/tor-dev/2017-April/012123.html
 
 Appendix A. Signature scheme with key blinding [KEYBLIND]
 
