@@ -703,6 +703,9 @@ Table of contents:
    The length of a "time period" is controlled by the consensus
    parameter 'hsdir-interval', and is a number of minutes between 30 and
    14400 (10 days). The default time period length is 1440 (one day).
+   (In case of testing networks with altered voting schedules, we set the time
+   period length to be equal to the length of a shared random protocol run
+   (which is 24 hours by default: see srv-spec.txt))
 
    Time periods start at the Unix epoch (Jan 1, 1970), and are computed by
    taking the number of minutes since the epoch and dividing by the time
@@ -721,6 +724,14 @@ Table of contents:
    Specifically, time period #16903 began 16903*1440*60 + (12*60*60) seconds
    after the epoch, at 2016-04-12 12:00 UTC, and ended at 16904*1440*60 +
    (12*60*60) seconds after the epoch, at 2016-04-13 12:00 UTC.
+
+   To make the "rotation time offset" logic independent of actual times of the
+   day and to make it work as intended in networks with more frequent voting
+   schedules, we set "rotation time offset" to be equal to the length of a
+   shared random protocol phase (which is 12 hours by default). This is
+   appropriate since the "rotation time offset" logic exists to synchronize the
+   time period start time with the shared random protocol: we want the next
+   time period to start long after the SRV of the day gets published.
 
 2.2.2. When to publish a hidden service descriptor [WHEN-HSDESC]
 
