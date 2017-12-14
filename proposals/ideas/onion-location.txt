@@ -1,0 +1,103 @@
+
+
+========================================================================
+UX improvement proposal: Onion redirects using Onion-Location HTTP header
+========================================================================
+
+1. Motivation:
+
+   Lots of high-profile websites have onion addresses these days (e.g. Tor ,
+   NYT, blockchain, ProPublica).  All those websites seem confused on what's
+   the right way to inform their users about their onion addresses. Here are
+   some confusion examples:
+     a) torproject.org does not even advertise their onion address to Tor users (!!!)
+     b) blockchain.info throws an ugly ASCII page to Tor users mentioning their onion
+        address and completely wrecking the UX (loses URL params, etc.)
+     c) ProPublica has a "Browse via Tor" section which redirects to the onion site.
+
+   Ideally there would be a consistent way for websites to inform their users
+   about their onion counterpart. This would provide the following positives:
+     + Tor users would use onions more often. That's important for user
+       education and user perception, and also to partially dispell the darkweb myth.
+     + Website operators wouldn't have to come up with ad-hoc ways to advertise
+       their onion services, which sometimes results in complete breakage of
+       the user experience (particularly with blockchain)
+
+   This proposal specifies a simple way forward here that's far from perfect,
+   but can still provide benefits and also improve user-education around onions
+   so that in the future we could employ more advanced techniques.
+
+   Also see Tor ticket #21952 for more discussion on this:
+      https://trac.torproject.org/projects/tor/ticket/21952
+
+2. Proposal
+
+   We introduce a new HTTP header called "Onion-Location" with the exact same
+   restrictions and semantics as the Location HTTP header. Websites can use the
+   Onion-Location HTTP header to specify their onion counterpart, in the same
+   way that they would use the Location header.
+
+   The Tor Browser intercepts the Onion-Location header (if any) and informs
+   the user of the existense of the onion site, giving them the option to visit
+   it. Tor Browser only does so if the header is served over HTTPS.
+
+   Browsers that don't support Tor SHOULD ignore the Onion-Location header.
+
+3. Improvements
+
+4. Drawbacks
+
+4.1. No security/performance benefits
+
+   While we could come up with onion redirection proposals that provide
+   security and performance benefits, this proposal does not actually provide
+   any of those.
+
+   As a matter of fact, the security remains the same as connecting to normal
+   websites (since we trust its HTTP headers), and the performance gets worse
+   since we first need to connect to the website, get its headers, and then
+   also connect to the onion.
+
+   Still _all_ the website approaches mentioned in the "Motivation" section
+   suffer from the above drawbacks, and sysadmins still come up with ad-hoc
+   ways to inform users abou their onions. So this simple proposal will still
+   help those websites and also pave the way forward for future auto-redirect
+   techniques.
+
+4.2. Defining new HTTP headers is not the best idea
+
+   This proposal defines a new non-standard HTTP header. This is not great
+   because it makes Tor into a "special" thing that needs to be supported with
+   special headers. However, the fact that it's a new HTTP header that only
+   works for Tor is a positive thing since it means that non-Tor browsers will
+   just ignore it.
+
+   Furthermore, another drawback is that this HTTP header will increase the
+   bandwidth needlessly if it's also served to non-Tor clients. Hence websites
+   with lots of client traffic are encouraged to use tools that detect Tor
+   users and only serve the header to them (e.g. tordnsel).
+
+5. The future
+
+   As previously discussed, this is just a simple proposal to introduce the
+   redirection concept to people, and also to help some sysadmins who are
+   currently coming up with weird ways to inform people about their
+   onions. It's not the best way to do this, but it's definitely one of the
+   simplest ways.
+
+   In the future we could implement with more advanced auto-redirect proposals like:
+
+   a) Have a "domains to onions" map into HTTPS-everywhere and have it do the
+      autoredirects for us (performance benefits, and security benefits under many
+      threat models).
+
+   b) Bake onion addresses into SSL certificates and Let's Encrypt as suggested
+      by comment:42 in #21952.
+
+   But both of the designs above require non-trivial engineering/policy work
+   and would still confuse people. So I think starting with a simple approach
+   that will educate users and then moving to more advanced designs is a more
+   normative way to go.
+
+======================================================================
+
