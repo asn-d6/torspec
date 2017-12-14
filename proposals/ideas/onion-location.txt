@@ -54,9 +54,11 @@ UX improvement proposal: Onion redirects using Onion-Location HTTP header
    any of those.
 
    As a matter of fact, the security remains the same as connecting to normal
-   websites (since we trust its HTTP headers), and the performance gets worse
-   since we first need to connect to the website, get its headers, and then
-   also connect to the onion.
+   websites, since for this proposal to work we need to trust its HTTP headers,
+   and the user might have already provided identifying information
+   (e.g. cookies) to the website. The performance is worse than connecting to a
+   normal website, since Tor first needs to connect to the website, get its
+   headers, and then finally connect to the onion.
 
    Still _all_ the website approaches mentioned in the "Motivation" section
    suffer from the above drawbacks, and sysadmins still come up with ad-hoc
@@ -75,7 +77,18 @@ UX improvement proposal: Onion redirects using Onion-Location HTTP header
    Furthermore, another drawback is that this HTTP header will increase the
    bandwidth needlessly if it's also served to non-Tor clients. Hence websites
    with lots of client traffic are encouraged to use tools that detect Tor
-   users and only serve the header to them (e.g. tordnsel).
+   users and only serve the header to them (e.g. tordnsel). Website operators
+   should be aware that tools like tordnsel have false positive potential (they
+   might treat Tor users as non-Tor users) which will result in not sending
+   them the Onion-Location header.
+
+   Finally, websites can also detect Tor users (as discussed in the above
+   paragraph) and redirect them using the Location header, thus triggering a
+   non-prompting redirect. Websites doing so should consider the potential user
+   confusion of being redirected to an odd-looking domain. The Onion-Location
+   mechanism offered in this proposal is designed to provide a
+   browser-supported option to consistently offer an onion service in a
+   hopefuly less-confusing way.
 
 5. The future
 
@@ -100,4 +113,3 @@ UX improvement proposal: Onion redirects using Onion-Location HTTP header
    normative way to go.
 
 ======================================================================
-
