@@ -2424,8 +2424,10 @@ Appendix F. Two methods for managing revision counters.
     service instances need to coordinate their revision counters,
     without an actual coordination mechanism.
 
-    Let T be the number of seconds that have elapsed since the blinded
-    key became valid, plus 1.  (T must be at least 1.)
+    Let T be the number of seconds that have elapsed since the descriptor
+    became valid, plus 1.  (T must be at least 1.) Implementations can use the
+    number of seconds since the start time of the shared random protocol run
+    that corresponds to this descriptor.
 
     Let S be a secret that all the service providers share.  For
     example, it could be the private signing key corresponding to the
