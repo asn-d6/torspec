@@ -540,14 +540,24 @@ Table of contents:
    (NOTE: although the protocol allows them, offline keys are not
    implemented as of 0.3.2.1-alpha.)
 
-1.8. In more detail: Encryption Keys And Replay Resistance
+1.8. In more detail: Encryption Keys And Replay Resistance [REPLAY_ATTACKS]
 
-   To avoid replays of an introduction request by an introduction point,
-   a hidden service host must never accept the same request
-   twice. Earlier versions of the hidden service design used an
-   authenticated timestamp here, but including a view of the current
-   time can create a problematic fingerprint. (See proposal 222 for more
-   discussion.)
+   We take extra care to avoid replays of introduction requests either by
+   malicious clients or malicious introduction points given their relevance in
+   amplifying denial of service attacks. For this reason we use two replay
+   caches:
+
+   - Onion services have a global replay cache which makes sure that malicious
+     clients can't do replays over different introduction points with the same
+     rendezvous cookie. This replay cache works by tracking the
+     RENDEZVOUS_COOKIE found in INTRODUCE2 cells. The replay cache gets reset
+     every REND_REPLAY_TIME_INTERVAL seconds (5 minutes).
+
+   - Onion services have a replay cache for each introduction point which makes
+     sure that malicious introduction points can't replay legitimate client
+     requests even tho they can't parse them.  The replay cache works by
+     tracking the ENCRYPTED part of an INTRODUCE2 cell, and the replay cache
+     gets reset at a random point between 150k and 300k introductions.
 
 1.9. In more detail: A menagerie of keys
 
@@ -1672,10 +1682,10 @@ Table of contents:
    introduction circuit.
 
    The service host then checks whether it has received a cell with these
-   contents or rendezvous cookie before. If it has, it silently drops it as a
-   replay. (It must maintain a replay cache for as long as it accepts cells
-   with the same encryption key. Note that the encryption format below should
-   be non-malleable.)
+   contents or rendezvous cookie before (see [REPLAY_ATTACKS]). If it has, it
+   silently drops it as a replay. (It must maintain a replay cache for as long
+   as it accepts cells with the same encryption key. Note that the encryption
+   format below should be non-malleable.)
 
    If the cell is not a replay, it decrypts the ENCRYPTED field,
    establishes a shared key with the client, and authenticates the whole
