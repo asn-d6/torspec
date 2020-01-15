@@ -511,10 +511,14 @@ Table of contents:
 1.5. In more detail: Scaling to multiple hosts
 
    This design is compatible with our current approaches for scaling hidden
-   services. Specifically, hidden service operators can use onionbalance to
-   achieve high availability between multiple nodes on the HSDir
-   layer. Furthermore, operators can use proposal 255 to load balance their
-   hidden services on the introduction layer. See [SCALING-REFS] for further
+   services.
+
+   Specifically, hidden service operators can use onionbalance to achieve high
+   availability between multiple nodes on the HSDir layer. For more information
+   on how this can be achieved see section [ONIONBALANCE].
+
+   Furthermore, operators can use proposal 255 to load balance their hidden
+   services on the introduction layer. See [SCALING-REFS] for further
    discussions on this topic and alternative designs.
 
 1.6. In more detail: Backward compatibility with older hidden service
@@ -2222,6 +2226,9 @@ References:
 [VANITY-REFS]:
         https://github.com/Yawning/horse25519
 
+[ONIONBALANCE-REFS]:
+        https://blog.torproject.org/cooking-onions-finding-onionbalance
+
 [ONIONADDRESS-REFS]:
         https://lists.torproject.org/pipermail/tor-dev/2017-January/011816.html
 
@@ -2596,3 +2603,38 @@ Appendix F. Two methods for managing revision counters.
     Similarly, implementations SHOULD NOT let the revision counter
     increase forever without resetting it -- doing so links the service
     across changes in the blinded public key.
+
+Appendix G. Scaling to multiple hosts
+
+G.1. Scaling with onionbalance [ONIONBALANCE]
+
+  Hidden services can do horizontal load balancing by using tools like
+  onionbalance which distribute the introduction/rendezvous load to multiple
+  hosts. See [ONIONBALANCE-REFS] for how this can be achieved.
+
+  Unfortunately, because the v3 protocol uses the subcredential as part of the
+  ntor handshake in the introduction phase (see [NTOR-WITH-EXTRA-DATA]), the
+  onionbalance backend instances need to be able to compute the frontend's
+  subcredential to finish the ntor handshake with incoming clients.
+
+  This is done using the HiddenServiceOnionBalanceInstance torrc option which
+  informs the backend tor instances of the frontend onion address. This allows
+  backend tor instances to compute the needed subcredential for each incoming
+  INTRO2 request. In particular, the backend instance will compute the
+  subcredentials of the frontend instance for the current/previous/next time
+  periods (to account for consensus skew between service and client), and also
+  compute its own subcredential. The backend instance then attempts to finish
+  the ntor handshake with all those subcredentials until one succeeds.
+
+  Here are some issues that arise from this behavior:
+
+  - This induces a tiny timing flactuation to clients who connect to the
+    backend instance, which might allow them to figure out that they are
+    speaking with an onionbalance instance.
+
+  - This allows clients who know both the frontend and the backend onion
+    address to deduce that they belong to the same onionbalance instance since
+    they can use the same subcredential in both. Clients can also do that by
+    inspecting both descriptors and seeing that they contain the same
+    introduction point keys.
+
