@@ -1,0 +1,638 @@
+Filename: xxx-pow-over-intro-v1
+Title: A First Take at PoW Over Introduction Circuits
+Author: George Kadianakis
+Created: 2 April 2020
+Status: Draft
+
+0. Abstract
+
+  This proposal aims to thwart introduction flooding DoS attacks by introducing
+  a dynamic Proof-Of-Work protocol that occurs over introduction circuits.
+
+1. Motivation
+
+  So far our attempts at limiting the impact of introduction flooding DoS
+  attacks on onion services has been focused on horizontal scaling with
+  Onionbalance, optimizing the CPU usage of Tor and applying congestion control
+  using rate limiting. While these measures move the goalpost forward, a core
+  problem with onion service DoS is that building rendezvous circuits is a
+  costly procedure both for the service and for the network. If we ever hope to
+  have truly reachable global onion services, we need to make it harder for
+  attackers to overload the service with introduction requests.
+
+  This proposal achieves this by allowing onion services to specify an optional
+  dynamic proof-of-work scheme that its clients need to participate in if they
+  want to get served.
+
+  With the right parameters, this proof-of-work scheme acts as a gatekeeper to
+  block amplification attacks by attackers while letting legitimate clients
+  through.
+
+1.1. Threat model [THREAT_MODEL]
+
+1.1.1. Attacker profiles [ATTACKER_MODEL]
+
+  This proposal is written to thwart specific attackers. A simple PoW proposal
+  cannot defend against all and every DoS attack on the Internet, but there are
+  adverary models we can defend against.
+
+  Let's start with some adversary profiles:
+
+  "The script-kiddie"
+
+    The script-kiddie has a single computer and pushes it to its
+    limits. Perhaps it also has a VPS and a pwned server. We are talking about
+    an attacker with total access to 10 Ghz of CPU and 10 GBs of RAM. We
+    consider the total cost for this attacker to be zero $.
+
+  "The small botnet"
+
+    The small botnet is a bunch of computers lined up to do an introduction
+    flooding attack. Assuming 500 medium-range computers, we are talking about
+    an attacker with total access to 10 Thz of CPU and 10 TB of RAM. We consider
+    the upfront cost for this attacker to be about $400.
+
+  "The large botnet"
+
+    The large botnet is a serious operation with many thousands of computers
+    organized to do this attack. Assuming 100k medium-range computers, we are
+    talking about an attacker with total access to 200 Thz of CPU and 200 TB of
+    RAM. The upfront cost for this attacker is about $36k.
+
+  We hope that this proposal can help us defend against the script-kiddie
+  attacker and small botnets. To defend against a large botnet we would need
+  more tools in our disposal (see [FUTURE_WORK]).
+
+  {XXX: Do the above make sense? What other attackers do we care about? What
+        other metrics do we care about? Network speed? I got the botnet costs
+        from here [REF_BOTNET] Back up our claims of defence.}
+
+1.1.2. User profiles [USER_MODEL]
+
+  We have attackers and we have users. Here are a few user profiles:
+
+  "The standard web user"
+
+    This is a standard laptop/desktop user who is trying to browse the
+    web. They don't know how these defences work and they don't care to
+    configure or tweak them. They are gonna use the default values and if the
+    site doesn't load, they are gonna close their browser and be sad at Tor.
+    They run a 2Ghz computer with 4GB of RAM.
+
+  "The motivated user"
+
+    This is a user that really wants to reach their destination. They don't
+    care about the journey; they just want to get there. They know what's going
+    on; they are willing to tweak the default values and make their computer do
+    expensive multi-minute PoW computations to get where they want to be.
+
+  "The mobile user"
+
+    This is a motivated user on a mobile phone. Even tho they want to read the
+    news article, they don't have much leeway on stressing their machine to do
+    more computation.
+
+  We hope that this proposal will allow the motivated user to always connect
+  where they want to connect to, and also give more chances to the other user
+  groups to reach the destination.
+
+1.1.3. The DoS Catch-22 [CATCH22]
+
+  This proposal is not perfect and it does not cover all the use cases. Still,
+  we think that by covering some use cases and giving reachability to the
+  people who really need it, we will severely demotivate the attackers from
+  continuing the DoS attacks and hence stop the DoS threat all
+  together. Furthermore, by increasing the cost to launch a DoS attack, a big
+  class of DoS attackers will disappear from the map, since the expected ROI
+  will decrease.
+
+2. System Overview
+
+2.1. Tor protocol overview
+
+                                          +----------------------------------+
+                                          |                                  |
+   +-------+ INTRO1  +-----------+ INTRO2 +--------+                         |
+   |Client |-------->|Intro Point|------->|  PoW   |-----------+             |
+   +-------+         +-----------+        |Verifier|           |             |
+                                          +--------+           |             |
+                                          |                    |             |
+                                          |                    |             |
+                                          |         +----------v---------+   |
+                                          |         |Intro Priority Queue|   |
+                                          +---------+--------------------+---+
+                                                           |  |  |
+                                                Rendezvous |  |  |
+                                                  circuits |  |  |
+                                                           v  v  v
+
+
+
+  The proof-of-work scheme specified in this proposal takes place during the
+  introduction phase of the onion service protocol. It's an optional mechanism
+  that only occurs if the service requires it. It can be enabled and disabled
+  either through its torrc or through the control port.
+
+  In summary, the following steps are taken for the protocol to complete:
+
+  1) Service encodes PoW parameters in descriptor [DESC_POW]
+  2) Client fetches descriptor and computes PoW [CLIENT_POW]
+  3) Client completes PoW and sends results in INTRO1 cell [INTRO1_POW]
+  4) Service verifies PoW and queues introduction based on PoW effort [SERVICE_VERIFY]
+
+2.2. Proof-of-work overview
+
+2.2.1. Primitives
+
+  For our proof-of-work scheme we want to minimize the spread of resources
+  between a motivated attacker and legitimate clients. This means that we are
+  looking to minimize any benefits that GPUs or ACICs can offer to an attacker.
+
+  For this reason we chose argon2 [REF_ARGON2] as the hash function for our
+  proof-of-work scheme since it's well audited and GPU-resistant and to some
+  extend ASIC-resistant as well.
+
+  As a password hash function, argon2 by default outputs 32 bytes of hash, and
+  takes as primary input a message and a nonce/salt. For the purposes of this
+  specification we will define an argon2() function as:
+     uint8_t hash_output[32] = argon2(uint8_t *message, uint8_t *nonce)'.
+
+  See section [ARGON_PARAMS] for more information on the secondary inputs of
+  argon2.
+
+2.2.2. Dynamic PoW
+
+  DoS is a dynamic problem where the attacker's capabilities constantly change,
+  and hence we want our proof-of-work system to be dynamic and not stuck with a
+  static difficulty setting. Hence, instead of forcing clients to go below a
+  static target like in Bitcoin to be successful, we ask clients to "bid" using
+  their PoW effort. Effectively, a client gets higher priority the higher
+  effort they put into their proof-of-work. This is similar to how
+  proof-of-stake works but instead of staking coins, you stake work.
+
+  The benefit here is that legitimate clients who really care about getting
+  access can spend a big amount of effort into their PoW computation, which
+  should guarantee access to the service given reasonable adversary models. See
+  [POW_SECURITY] for more details about these guarantees and tradeoffs.
+
+3. Protocol specification
+
+3.1. Service encodes PoW parameters in descriptor [DESC_POW]
+
+  This whole protocol starts with the service encoding the PoW parameters in
+  the 'encrypted' (inner) part of the v3 descriptor. As follows:
+
+       "pow-params" SP type SP seed-b64 SP expiration-time NL
+
+        [At most once]
+
+        type: The type of PoW system used. We call the one specified here "v1"
+
+        seed-b64: A random seed that should be used as the input to the PoW
+                  hash function. Should be 32 random bytes encoded in base64
+                  without trailing padding.
+
+        expiration-time: A timestamp after which the above seed expires and is
+                         no longer valid as the input for PoW. It's needed so
+                         that the size of our replay cache does not grow
+                         infinitely. It should be set to an hour in the future
+                         (+- some randomness).  {TODO: PARAM_TUNING}
+
+       {XXX: Expiration time makes us even more susceptible to clock skews, but
+             it's needed so that our replay cache refreshes. How to fix this?
+             See [CLIENT_BEHAVIOR] for more details.}
+
+3.2. Client fetches descriptor and computes PoW [CLIENT_POW]
+
+  If a client receives a descriptor with "pow-params", it should assume that
+  the service is expecting a PoW input as part of the introduction protocol.
+
+  In such cases, the client should have been configured with a specific PoW
+  'target' (which is a 32-byte integer similar to the 'target' of Bitcoin
+  [REF_TARGET]). See [POW_SECURITY] for more information of how such a target
+  should be set. For the purposes of this section, we will assume that the
+  target has been set automatically by Tor, or the user configured it manually.
+
+  Now the client parses the descriptor and extracts the PoW parameters. It
+  makes sure that the expiration-time has not expired and if it has, it needs
+  to fetch a new descriptor.
+
+  To complete the PoW the client follows the following logic:
+
+      a) Client generates 'nonce' as 32 random bytes.
+      b) Client derives 'seed' by decoding 'seed-b64'.
+      c) Client computes hash_output = argon2(seed, nonce)
+      d) Client interprets hash_output as a 32-byte big-endian integer.
+      e) Client checks if int(hash_output) <= target.
+        e1) If yes, success! The client uses 'hash_output' as the hash and
+            'nonce' and 'seed' as its inputs.
+        e2) If no, fail! The client interprets 'nonce' as a big-endian integer,
+            increments it by one, and goes back to step (c).
+
+  At the end of the above procedure, the client should have a triplet
+  (hash_output, seed, nonce) that can be used as the answer to the PoW
+  puzzle. How quickly this happens depends solely on the 'target' parameter.
+
+3.3. Client sends PoW in INTRO1 cell [INTRO1_POW]
+
+  Now that the client has an answer to the puzzle it's time to encode it into
+  an INTRODUCE1 cell. To do so the client adds an extension to the encrypted
+  portion of the INTRODUCE1 cell by using the EXTENSIONS field (see
+  [PROCESS_INTRO2] section in rend-spec-v3.txt). The encrypted portion of the
+  INTRODUCE1 cell only gets read by the onion service and is ignored by the
+  introduction point.
+
+  We propose a new EXT_FIELD_TYPE value:
+
+     [01] -- PROOF_OF_WORK
+
+   The EXT_FIELD content format is:
+
+      POW_VERSION    [1 byte]
+      POW_SEED       [32 bytes]
+      POW_NONCE      [32 bytes]
+      POW_OUTPUT     [32 bytes]
+
+   where:
+
+    POW_VERSION is 1 for the protocol specified in this proposal
+    POW_SEED is 'seed' from the section above
+    POW_NONCE is 'nonce' from the section above
+    POW_OUTPUT is 'hash_output' from the section above
+
+   {XXX: do we need POW_VERSION? Perhaps we can use EXT_FIELD_TYPE as version}
+   {XXX: do we need to encode the SEED? Perhaps we can ommit it since the
+   service already knows it. But what happens in cases of desynch, if client
+   has diff seed from service?}
+   {XXX: Do we need to include the output? Probably not. The service has to
+   compute it anyway during verification. What's the use?}
+
+   This will increase the INTRODUCE1 payload size by 99 bytes since the
+   extension type and length is 2 extra bytes, the N_EXTENSIONS field is always
+   present and currently set to 0 and the EXT_FIELD is 97 bytes. According to
+   ticket #33650, INTRODUCE1 cells currently have more than 200 bytes available.
+
+3.4. Service verifies PoW and handles the introduction  [SERVICE_VERIFY]
+
+   When a service receives an INTRODUCE1 with the PROOF_OF_WORK extension, it
+   should check its configuration on whether proof-of-work is required to
+   complete the introduction. If it's not required, the extension SHOULD BE
+   ignored. If it is required, the service follows the procedure detailed in
+   this section.
+
+3.4.1. PoW verification
+
+   To verify the client's proof-of-work the service extracts (hash_output,
+   seed, nonce) from the INTRODUCE1 cell and MUST do the following steps:
+
+   1) Make sure that the client's seed is identical to the active seed.
+   2) Check the client's nonce for replays (see [REPLAY_PROTECTION] section).
+   3) Verify that 'hash_output =?= argon2(seed, nonce)
+
+   If any of these steps fail the service MUST ignore this introduction request
+   and abort the protocol.
+
+   If all the steps passed, then the circuit is added to the introduction queue
+   as detailed in section [INTRO_QUEUE].
+
+3.4.1.1. Replay protection [REPLAY_PROTECTION]
+
+  The service MUST NOT accept introduction requests with the same (seed, nonce)
+  tuple. For this reason a replay protection mechanism must be employed.
+
+  The simplest way is to use a simple hash table to check whether a (seed,
+  nonce) tuple has been used before for the actiev duration of a
+  seed. Depending on how long a seed stays active this might be a viable
+  solution with reasonable memory/time overhead.
+
+  If there is a worry that we might get too many introductions during the
+  lifetime of a seed, we can use a Bloom filter as our replay cache
+  mechanism. The probabilistic nature of Bloom filters means that sometimes we
+  will flag some connections as replays even if they are not; with this false
+  positive probability increasing as the number of entries increase. However,
+  with the right parameter tuning this probability should be negligible and
+  well handled by clients. {TODO: PARAM_TUNING}
+
+3.4.2. The Introduction Queue  [INTRO_QUEUE]
+
+3.4.2.1. Adding introductions to the introduction queue
+
+  When PoW is enabled and a verified introduction comes through, the service
+  instead of jumping straight into rendezvous, queues it and prioritizes it
+  based on how much effort was devoted by the client to PoW. This means that
+  introduction requests with high effort should be prioritized over those with
+  low effort.
+
+  To do so, the service maintains an "introduction priority queue" data
+  structure. Each element in that priority queue is an introduction request,
+  and its priority is the effort put into its PoW:
+
+  When a verified introduction comes through, the service interprets the PoW
+  hash as a 32-byte big-endian integer 'hash_int' and based on that integer it
+  inserts it into the right position of the priority_queue: The smallest
+  'hash_int' goes forward in the queue. If two elements have the same value,
+  the older one has priority over the newer one.
+  {XXX: Is this operation with 32-bytes integers expensive? How to make cheaper?}
+
+  {TODO: PARAM_TUNING: If the priority queue is only ordered based on the
+   effort what attacks can happen in various scenarios? Do we want to order on
+   time+effort?  Which scenarios and attackers should we examine here?}
+
+  {TODO: PARAM_TUNING: What's the max size of the queue? How do we trim it? Can we
+   use WRED usefully?}
+
+3.4.2.2. Handling introductions from the introduction queue [HANDLE_QUEUE]
+
+  The service should handle introductions by pulling from the introduction
+  queue.
+
+  Similar to how our cell scheduler works, the onion service subsystem will
+  poll the priority queue every 100ms tick and process the first 20 cells from
+  the priority queue (if they exist). The service will perform the rendezvous
+  and the rest of the onion service protocol as normal.
+
+  With this tempo, we can process 200 introduction cells per second.
+  {XXX: Is this good?}
+
+  {TODO: PARAM_TUNING: STRAWMAN: This needs hella tuning. Processing 20 cells
+  per 100ms is probably unmaintainable, since each cell is quite expensive:
+  doing so involving path selection, crypto and making circuits. We will need
+  to profile this procedure and see how we can do this scheduling better.}
+
+  {XXX: This might be a nice place to promote multithreading. Queues and pools
+  are nice objects to do multithreading since you can have multiple threads
+  pull from the queue, or leave stuff on the queue. Not sure if this should be
+  in the proposal tho.}
+
+4. Attacker strategies [ATTACK_META]
+
+  Now that we defined our protocol we need to start tweaking the various
+  knobs. But before we can do that, we first need to understand a few
+  high-level attacker strategies to see what we are fighting against.
+
+4.1.1. Total overwhelm strat
+
+  Given the way the introduction queue works (see [HANDLE_QUEUE]), a very
+  effective strategy for the attacker is to totally overwhelm the queue
+  processing by sending more high-effort introductions than the onion service
+  can handle at any given tick.
+
+  To do so, the attacker would have to send at least 20 high-effort
+  introduction cells every 100ms, where high-effort is a PoW which is above the
+  estimated level of "the motivated user" (see [USER_MODEL]).
+
+  An easier attack for the adversary, is the same strategy but with
+  introduction cells that are all above the comfortable level of "the standard
+  user" (see [USER_MODEL]). This would block out all standard users and only
+  allow motivated users to pass.
+
+  {XXX: What other attack strategies we should care about?}
+
+5. Parameter tuning [POW_SECURITY] {XXX section}
+
+  There are various parameters in this system that need to be tuned.
+
+  We will first start by tuning the default difficulty of our PoW
+  system. That's gonna define an expected time for attackers and clients to
+  succeed.
+
+  We are then gonna tune the parameters of the argon2 hash function. That will
+  define the resources that an attacker needs to spend to overwhelm the onion
+  service, the resources that the service needs to spend to verify introduction
+  requests, and the resources that legitimate clients need to spend to get to
+  the onon service.
+
+5.1. PoW Difficulty settings
+
+  The difficulty setting of our PoW basically dictates how difficult it should
+  be to get a success in our PoW system. In classic PoW systems, "success" is
+  defined as getting a hash output below the "target". However, since our
+  system is dynamic, we define "success" as an abstract high-effort computation.
+
+  Even tho our system is dynamic, we still need default difficulty settings
+  that will define the metagame. The client and attacker can still aim higher
+  or lower, but for UX purposes and for analysis purposes we do need to define
+  some difficulties.
+
+  We hence created the table (see [REF_TABLE]) below which shows how much time
+  a legitimate client with a single machine should expect to burn before they
+  get a single success. The x-axis is how many successes we want the attacker
+  to be able to do per second: the more successes we allow the adversary, the
+  more they can overwhelm our introduction queue. The y-axis is how many
+  machines the adversary has in her disposal, ranging from just 5 to 1000.
+
+       ===============================================================
+       |    Expected Time (in seconds) Per Success For One Machine   |
+ ===========================================================================
+ |                                                                          |
+ |   Attacker Succeses        1       5       10      20      30      50    |
+ |       per second                                                         |
+ |                                                                          |
+ |            5               5       1       0       0       0       0     |
+ |            50              50      10      5       2       1       1     |
+ |            100             100     20      10      5       3       2     |
+ | Attacker   200             200     40      20      10      6       4     |
+ |  Boxes     300             300     60      30      15      10      6     |
+ |            400             400     80      40      20      13      8     |
+ |            500             500     100     50      25      16      10    |
+ |            1000            1000    200     100     50      33      20    |
+ |                                                                          |
+ ============================================================================
+
+  Here is how you can read the table above:
+
+  - If an adversary has a botnet with 1000 boxes, and we want to limit her to 1
+    success per second, then a legitimate client with a single box should be
+    expected to spend 1000 seconds getting a single success.
+
+  - If an adversary has a botnet with 1000 boxes, and we want to limit her to 5
+    successes per second, then a legitimate client with a single box should be
+    expected to spend 200 seconds getting a single success.
+
+  - If an adversary has a botnet with 500 boxes, and we want to limit her to 5
+    successes per second, then a legitimate client with a single box should be
+    expected to spend 100 seconds getting a single success.
+
+  - If an adversary has access to 50 boxes, and we want to limit her to 5
+    successes per second, then a legitimate client with a single box should be
+    expected to spend 10 seconds getting a single success.
+
+  - If an adversary has access to 5 boxes, and we want to limit her to 5
+    successes per second, then a legitimate client with a single box should be
+    expected to spend 1 seconds getting a single success.
+
+  With the above table we can create some profiles for default values of our
+  PoW difficulty. So for example, we can use the last case as the default
+  parameter for Tor Browser, and then create three more profiles for more
+  expensive cases, scaling up to the first case which could be hardest since
+  the client is expected to spend 15 minutes for a single introduction.
+
+  {TODO: PARAM_TUNING You can see that this section is completely CPU/memory
+  agnostic, and it does not take into account potential optimizations that can
+  come from GPU/ASICs. This is intentional so that we don't put more variables
+  into this equation right now, but as this proposal moves forward we will need
+  to put more concrete values here.}
+
+5.2. Argon2 parameters [ARGON_PARAMS]
+
+  We now need to define the secondary argon2 parameters as defined in
+  [REF_ARGON2]. This includes the number of lanes 'h', the memory size 'm', the
+  number of iterations 't'. Section 9 of [REF_ARGON2] recommends an approach of
+  how to tune these parameters.
+
+  To tune these parameters we are looking to *minimize* the verification speed
+  of an onion service, while *maximizing* the sparse resources spent by an
+  adversary trying to overwhelm the service using [ATTACK_META].
+
+  When it comes to verification speed, to verify a single introduction cell the
+  service needs to do a single argon2 call: so the service will need to do
+  hundreds of those per second as INTRODUCE2 cells arrive. The service will
+  have to do this verification step even for very cheap zero-effort PoW
+  received, so this has to be a cheap procedure so that it doesn't become a DoS
+  vector of each own. Hence each individual argon2 call must be cheap enough to
+  be able to be done comfortably and plentifuly by an onion service with a
+  single host (or horizontally scaled with Onionbalance).
+
+  At the same time, the adversary will have to do thousands of these calls if
+  she wants to make high-effort PoW, so it's this assymetry that we are looking
+  to exploit here. Right now, the most expensive resource for adversaries is
+  the RAM size, and that's why we chose argon2 which is memory-hard.
+
+  To minmax this game we will need
+
+  {TODO: PARAM_TUNING: I've had a hard time minmaxing this game for
+  argon2. Even argon2 invocations with a small memory parameter will take
+  multiple milliseconds to run on my machine, and the parameters recommended in
+  section 8 of the paper all take many hundreds of milliseconds. This is just
+  not practical for our use case, since we want to process hundreds of such PoW
+  per second... I also did not manage to find a benchmark of argon2 calls for
+  different CPU/GPU/FPGA configurations.}
+
+5. Client behavior [CLIENT_BEHAVIOR]
+
+  This proposal introduces a bunch of new ways where a legitimate client can
+  fail to reach the onion service.
+
+  Furthermore, there is currently no end-to-end way for the onion service to
+  inform the client that the introduction failed. The INTRO_ACK cell is not
+  end-to-end (it's from the introduction point to the client) and hence it does
+  not allow the service to inform the client that the rendezvous is never gonna
+  occur.
+
+  Let's examine a few such cases:
+
+5.1. Timeout issues
+
+  Alice can fail to reach the onion service if her introduction request falls
+  off the priority queue, or if the priority queue is so big that the
+  connection times out.
+
+  Is building a new introduction circuit sufficient here? Or do we need to
+  build an end-to-end mechanism over the introduction circuit to inform
+  her? {XXX}
+
+  How should timeout values change here since the priority queue will cause
+  bigger delays than usual to rendezvous? Can there be some feedback mechanism
+  to inform the client of its queue position or ETA?
+
+5.2. Seed expiration issues
+
+  As mentioned in [DESC_POW], the expiration timestamp on the PoW seed can
+  cause issues with clock skewed clients. Furthermore, even not clock skewed
+  clients can encounter TOCTOU-style race conditions here.
+
+  How should this be handled? Should we have multiple active seeds at the same
+  time similar to how we have overlapping descriptors and time periods in v3?
+  This would solve the problem but it grows the complexity of the system
+  substantially. {XXX}
+
+5.3. Other descriptor issues
+
+  Another race condition here is if the service enables PoW, while a client has
+  a cached descriptor. How will the client notice that PoW is needed? Does it
+  need to fetch a new descriptor? Should there be another feedback mechanism?
+  {XXX}
+
+5. Discussion
+
+5.1. UX
+
+  This proposal has user facing UX consequences. Here are a few UX approaches
+  with increasing engineering difficulty:
+
+  a) Tor Browser needs a "range field" which the user can use to specify how
+     much effort they want to spend in PoW if this ever occurs while they are
+     browsing. The ranges could be from "Easy" to "Difficult", or we could try
+     to estimate time using an average computer. This setting is in the Tor
+     Browser settings and users need to find it.
+
+  b) We start with a default effort setting, and then we use the new onion
+     errors (see #19251) to estimate when an onion service connection has
+     failed because of DoS, and only then we present the user a "range field"
+     which they can set dynamically. Detecting when an onion service connection
+     has failed because of DoS can be hard because of the lack of feedback (see
+     [CLIENT_BEHAVIOR])
+
+  c) We start with a default effort setting, and if things fail we
+     automatically try to figure out an effort setting that will work for the
+     user by doing some trial-and-error connections with different effort
+     values. Until the connection succeeds we present a "Service is
+     overwhelmed, please wait" message to the user.
+
+  For this proposal to work initially we need at least (a), and then we can
+  start thinking of how far we want to take it.
+
+5.2. Future directions [FUTURE_WORK]
+
+  This is just the beginning in DoS defences for Tor and there are various
+  future avenues that we can investigate. Here is a brief summary of these:
+
+  "More advanced PoW schemes" -- We could use more advanced memory-hard PoW
+         schemes like MTP-argon2 or Itsuku to make it even harder for
+         adversaries to create successful PoWs. Unfortunately these schemes
+         have much bigger proof sizes, and they won't fit in INTRODUCE1 cells.
+         See #31223 for more details.
+
+  "Third-party anonymous credentials" -- We can use anonymous credentials and a
+         third-party token issuance server on the clearnet to issue tokens
+         based on PoW or CAPTCHA and then use those tokens to get access to the
+         service. See [REF_CREDS] for more details.
+
+  "PoW + Anonymous Credentials" -- We can make a hybrid of the above ideas
+         where we present a hard puzzle to the user when connecting to the
+         onion service, and if they solve it we then give the user a bunch of
+         anonymous tokens that can be used in the future. This can all happen
+         between the client and the service without a need for a third party.
+
+  All of the above approaches are much more complicated than this proposal, and
+  hence we want to start easy before we get into more serious projects.
+
+5.3. Environment
+
+  We love the environment! We are concerned of how PoW schemes can waste energy
+  by doing useless hash iterations. Here is a few reasons we still decided to
+  pursue a PoW approach here:
+
+  "We are not making things worse" -- DoS attacks are already happening and
+      attackers are already burning energy to carry them out both on the
+      attacker side, on the service side and on the network side. We think that
+      asking legitimate clients to carry out PoW computations is not gonna
+      affect the equation too much, since an attacker right now can very
+      quickly cause the same damage that hundreds of legitimate clients do a
+      whole day.
+
+  "We hope to make things better" -- The hope is that proposals like this will
+      make the DoS actors go away and hence the PoW system will not be used. As
+      long as DoS is happening there will be a waste of energy, but if we
+      manage to demotivate them with technical means, the network as a whole
+      will less wasteful. Also see [CATCH22] for a similar argument.
+
+6. References
+
+  [REF_ARGON2]: https://github.com/P-H-C/phc-winner-argon2/blob/master/argon2-specs.pdf
+                https://password-hashing.net/#argon2
+  [REF_TABLE]: The table is based on the script below plus some manual editing for readability:
+               https://gist.github.com/asn-d6/99a936b0467b0cef88a677baaf0bbd04
+  [REF_BOTNET]: https://media.kasperskycontenthub.com/wp-content/uploads/sites/43/2009/07/01121538/ynam_botnets_0907_en.pdf
+  [REF_CREDS]: https://lists.torproject.org/pipermail/tor-dev/2020-March/014198.html
+  [REF_TARGET]: https://en.bitcoin.it/wiki/Target
