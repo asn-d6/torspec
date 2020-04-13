@@ -1,6 +1,6 @@
 Filename: xxx-pow-over-intro-v1
 Title: A First Take at PoW Over Introduction Circuits
-Author: George Kadianakis
+Author: George Kadianakis, Mike Perry, David Goulet
 Created: 2 April 2020
 Status: Draft
 
@@ -16,21 +16,28 @@ Status: Draft
   Onionbalance, optimizing the CPU usage of Tor and applying congestion control
   using rate limiting. While these measures move the goalpost forward, a core
   problem with onion service DoS is that building rendezvous circuits is a
-  costly procedure both for the service and for the network. If we ever hope to
-  have truly reachable global onion services, we need to make it harder for
-  attackers to overload the service with introduction requests.
+  costly procedure both for the service and for the network. For more
+  information on the limitations of rate-limiting when defending against DDoS,
+  see [REF_TLS_1].
 
-  This proposal achieves this by allowing onion services to specify an optional
-  dynamic proof-of-work scheme that its clients need to participate in if they
-  want to get served.
+  If we ever hope to have truly reachable global onion services, we need to
+  make it harder for attackers to overload the service with introduction
+  requests. This proposal achieves this by allowing onion services to specify
+  an optional dynamic proof-of-work scheme that its clients need to participate
+  in if they want to get served.
 
   With the right parameters, this proof-of-work scheme acts as a gatekeeper to
   block amplification attacks by attackers while letting legitimate clients
   through.
 
-1.1. Threat model [THREAT_MODEL]
+1.1. Related work
 
-1.1.1. Attacker profiles [ATTACKER_MODEL]
+  For a similar concept, see the three internet drafts that have been proposed
+  for defending against TLS-based DDoS attacks using client puzzles [REF_TLS].
+
+1.2. Threat model [THREAT_MODEL]
+
+1.2.1. Attacker profiles [ATTACKER_MODEL]
 
   This proposal is written to thwart specific attackers. A simple PoW proposal
   cannot defend against all and every DoS attack on the Internet, but there are
@@ -61,13 +68,13 @@ Status: Draft
 
   We hope that this proposal can help us defend against the script-kiddie
   attacker and small botnets. To defend against a large botnet we would need
-  more tools in our disposal (see [FUTURE_WORK]).
+  more tools in our disposal (see [FUTURE_DESIGNS]).
 
   {XXX: Do the above make sense? What other attackers do we care about? What
         other metrics do we care about? Network speed? I got the botnet costs
         from here [REF_BOTNET] Back up our claims of defence.}
 
-1.1.2. User profiles [USER_MODEL]
+1.2.2. User profiles [USER_MODEL]
 
   We have attackers and we have users. Here are a few user profiles:
 
@@ -96,7 +103,7 @@ Status: Draft
   where they want to connect to, and also give more chances to the other user
   groups to reach the destination.
 
-1.1.3. The DoS Catch-22 [CATCH22]
+1.2.3. The DoS Catch-22 [CATCH22]
 
   This proposal is not perfect and it does not cover all the use cases. Still,
   we think that by covering some use cases and giving reachability to the
@@ -129,9 +136,12 @@ Status: Draft
 
 
   The proof-of-work scheme specified in this proposal takes place during the
-  introduction phase of the onion service protocol. It's an optional mechanism
-  that only occurs if the service requires it. It can be enabled and disabled
-  either through its torrc or through the control port.
+  introduction phase of the onion service protocol.
+
+  The system described in this proposal is not meant to be on all the time, and
+  should only be enabled by services when under duress. The percentage of
+  clients receiving puzzles can also be configured based on the load of the
+  service.
 
   In summary, the following steps are taken for the protocol to complete:
 
@@ -175,6 +185,16 @@ Status: Draft
   should guarantee access to the service given reasonable adversary models. See
   [POW_SECURITY] for more details about these guarantees and tradeoffs.
 
+2.2.3. PoW effort
+
+  For our dynamic PoW system to work, we will need to be able to compare PoW
+  tokens with each other. To do so we define a function:
+         unsigned effort(uint8_t *token)
+  which takes as its argument a hash output token, and returns the number of
+  leading zero bits on it.
+
+  So for example effort(0000000110001010110100101) == 7.
+
 3. Protocol specification
 
 3.1. Service encodes PoW parameters in descriptor [DESC_POW]
@@ -192,11 +212,12 @@ Status: Draft
                   hash function. Should be 32 random bytes encoded in base64
                   without trailing padding.
 
-        expiration-time: A timestamp after which the above seed expires and is
-                         no longer valid as the input for PoW. It's needed so
-                         that the size of our replay cache does not grow
-                         infinitely. It should be set to an hour in the future
-                         (+- some randomness).  {TODO: PARAM_TUNING}
+        expiration-time: A timestamp in "YYYY-MM-DD SP HH:MM:SS" format after
+                         which the above seed expires and is no longer valid as
+                         the input for PoW. It's needed so that the size of our
+                         replay cache does not grow infinitely. It should be
+                         set to three hours in the future (+- some randomness).
+                         {TODO: PARAM_TUNING}
 
        {XXX: Expiration time makes us even more susceptible to clock skews, but
              it's needed so that our replay cache refreshes. How to fix this?
@@ -221,12 +242,13 @@ Status: Draft
 
       a) Client generates 'nonce' as 32 random bytes.
       b) Client derives 'seed' by decoding 'seed-b64'.
-      c) Client computes hash_output = argon2(seed, nonce)
-      d) Client interprets hash_output as a 32-byte big-endian integer.
-      e) Client checks if int(hash_output) <= target.
-        e1) If yes, success! The client uses 'hash_output' as the hash and
-            'nonce' and 'seed' as its inputs.
-        e2) If no, fail! The client interprets 'nonce' as a big-endian integer,
+      c) Client derives 'labeled_seed = seed + "TorV1PoW"'
+      d) Client computes hash_output = argon2(labeled_seed, nonce)
+      e) Client interprets hash_output as a 32-byte big-endian integer.
+      f) Client checks if int(hash_output) <= target.
+        f1) If yes, success! The client uses 'hash_output' as the puzzle
+            solution and 'nonce' and 'seed' as its inputs.
+        f2) If no, fail! The client interprets 'nonce' as a big-endian integer,
             increments it by one, and goes back to step (c).
 
   At the end of the above procedure, the client should have a triplet
@@ -249,28 +271,18 @@ Status: Draft
    The EXT_FIELD content format is:
 
       POW_VERSION    [1 byte]
-      POW_SEED       [32 bytes]
       POW_NONCE      [32 bytes]
-      POW_OUTPUT     [32 bytes]
 
    where:
 
     POW_VERSION is 1 for the protocol specified in this proposal
-    POW_SEED is 'seed' from the section above
     POW_NONCE is 'nonce' from the section above
-    POW_OUTPUT is 'hash_output' from the section above
 
-   {XXX: do we need POW_VERSION? Perhaps we can use EXT_FIELD_TYPE as version}
-   {XXX: do we need to encode the SEED? Perhaps we can ommit it since the
-   service already knows it. But what happens in cases of desynch, if client
-   has diff seed from service?}
-   {XXX: Do we need to include the output? Probably not. The service has to
-   compute it anyway during verification. What's the use?}
-
-   This will increase the INTRODUCE1 payload size by 99 bytes since the
+   This will increase the INTRODUCE1 payload size by 33 bytes since the
    extension type and length is 2 extra bytes, the N_EXTENSIONS field is always
-   present and currently set to 0 and the EXT_FIELD is 97 bytes. According to
-   ticket #33650, INTRODUCE1 cells currently have more than 200 bytes available.
+   present and currently set to 0 and the EXT_FIELD is 32 bytes. According to
+   ticket #33650, INTRODUCE1 cells currently have more than 200 bytes
+   available.
 
 3.4. Service verifies PoW and handles the introduction  [SERVICE_VERIFY]
 
@@ -280,7 +292,12 @@ Status: Draft
    ignored. If it is required, the service follows the procedure detailed in
    this section.
 
-3.4.1. PoW verification
+   If the service requires the PROOF_OF_WORK extension but received an
+   INTRODUCE1 cell without any embedded proof-of-work, the service SHOULD
+   consider this cell as a zero-effort introduction for the purposes of the
+   priority queue (see section [INTRO_QUEUE]).
+
+3.4.1. PoW verification [POW_VERIFY]
 
    To verify the client's proof-of-work the service extracts (hash_output,
    seed, nonce) from the INTRODUCE1 cell and MUST do the following steps:
@@ -327,12 +344,11 @@ Status: Draft
   structure. Each element in that priority queue is an introduction request,
   and its priority is the effort put into its PoW:
 
-  When a verified introduction comes through, the service interprets the PoW
-  hash as a 32-byte big-endian integer 'hash_int' and based on that integer it
-  inserts it into the right position of the priority_queue: The smallest
-  'hash_int' goes forward in the queue. If two elements have the same value,
-  the older one has priority over the newer one.
-  {XXX: Is this operation with 32-bytes integers expensive? How to make cheaper?}
+  When a verified introduction comes through, the service uses the effort()
+  function with hash_output as its input, and uses the output to place requests
+  into the right position of the priority_queue: The bigger the effort, the
+  more priority it gets in the queue. If two elements have the same effort, the
+  older one has priority over the newer one.
 
   {TODO: PARAM_TUNING: If the priority queue is only ordered based on the
    effort what attacks can happen in various scenarios? Do we want to order on
@@ -358,11 +374,6 @@ Status: Draft
   per 100ms is probably unmaintainable, since each cell is quite expensive:
   doing so involving path selection, crypto and making circuits. We will need
   to profile this procedure and see how we can do this scheduling better.}
-
-  {XXX: This might be a nice place to promote multithreading. Queues and pools
-  are nice objects to do multithreading since you can have multiple threads
-  pull from the queue, or leave stuff on the queue. Not sure if this should be
-  in the proposal tho.}
 
 4. Attacker strategies [ATTACK_META]
 
@@ -508,7 +519,7 @@ Status: Draft
   per second... I also did not manage to find a benchmark of argon2 calls for
   different CPU/GPU/FPGA configurations.}
 
-5. Client behavior [CLIENT_BEHAVIOR]
+6. Client behavior [CLIENT_BEHAVIOR]
 
   This proposal introduces a bunch of new ways where a legitimate client can
   fail to reach the onion service.
@@ -521,7 +532,7 @@ Status: Draft
 
   Let's examine a few such cases:
 
-5.1. Timeout issues
+6.1. Timeout issues
 
   Alice can fail to reach the onion service if her introduction request falls
   off the priority queue, or if the priority queue is so big that the
@@ -535,7 +546,7 @@ Status: Draft
   bigger delays than usual to rendezvous? Can there be some feedback mechanism
   to inform the client of its queue position or ETA?
 
-5.2. Seed expiration issues
+6.2. Seed expiration issues
 
   As mentioned in [DESC_POW], the expiration timestamp on the PoW seed can
   cause issues with clock skewed clients. Furthermore, even not clock skewed
@@ -546,19 +557,29 @@ Status: Draft
   This would solve the problem but it grows the complexity of the system
   substantially. {XXX}
 
-5.3. Other descriptor issues
+6.3. Other descriptor issues
 
   Another race condition here is if the service enables PoW, while a client has
   a cached descriptor. How will the client notice that PoW is needed? Does it
   need to fetch a new descriptor? Should there be another feedback mechanism?
   {XXX}
 
-5. Discussion
+7. Discussion
 
-5.1. UX
+7.1. UX
 
-  This proposal has user facing UX consequences. Here are a few UX approaches
-  with increasing engineering difficulty:
+  This proposal has user facing UX consequences.
+
+  Here is some UX improvements that don't need user-input:
+
+  - Primarily, there should be a way for Tor Browser to display to users that
+    additional time (and resources) will be needed to access a service that is
+    under attack. Depending on the design of the system, it might even be
+    possible to estimate how much time it will take.
+
+  And here are a few UX approaches that will need user-input and have an
+  increasing engineering difficulty. Ideally this proposal will not need
+  user-input and the default behavior should work for almost all cases.
 
   a) Tor Browser needs a "range field" which the user can use to specify how
      much effort they want to spend in PoW if this ever occurs while they are
@@ -579,13 +600,34 @@ Status: Draft
      values. Until the connection succeeds we present a "Service is
      overwhelmed, please wait" message to the user.
 
-  For this proposal to work initially we need at least (a), and then we can
-  start thinking of how far we want to take it.
+7.2. Future work [FUTURE_WORK]
 
-5.2. Future directions [FUTURE_WORK]
+7.2.1. Incremental improvements to this proposal
+
+  There are various improvements that can be done in this proposal, and while
+  we are trying to keep this v1 version simple, we need to keep the design
+  extensible so that we build more features into it. In particular:
+
+  - End-to-end introduction ACKs
+
+    This proposal suffers from various UX issues because there is no end-to-end
+    mechanism for an onion service to inform the client about its introduction
+    request. If we had end-to-end introduction ACKs many of the problems from
+    [CLIENT_BEHAVIOR] would be aleviated.
+
+  - Multithreading scheduler
+
+    Our scheduler is pretty limited by the fact that Tor has a single-threaded
+    design. If we improve our multithreading support we could handle a much
+    greater amount of introduction requests per second.
+
+
+
+7.2.2. Future designs [FUTURE_DESIGNS]
 
   This is just the beginning in DoS defences for Tor and there are various
-  future avenues that we can investigate. Here is a brief summary of these:
+  futured designs and schemes that we can investigate. Here is a brief summary
+  of these:
 
   "More advanced PoW schemes" -- We could use more advanced memory-hard PoW
          schemes like MTP-argon2 or Itsuku to make it even harder for
@@ -607,7 +649,7 @@ Status: Draft
   All of the above approaches are much more complicated than this proposal, and
   hence we want to start easy before we get into more serious projects.
 
-5.3. Environment
+7.3. Environment
 
   We love the environment! We are concerned of how PoW schemes can waste energy
   by doing useless hash iterations. Here is a few reasons we still decided to
@@ -627,7 +669,7 @@ Status: Draft
       manage to demotivate them with technical means, the network as a whole
       will less wasteful. Also see [CATCH22] for a similar argument.
 
-6. References
+8. References
 
   [REF_ARGON2]: https://github.com/P-H-C/phc-winner-argon2/blob/master/argon2-specs.pdf
                 https://password-hashing.net/#argon2
@@ -636,3 +678,7 @@ Status: Draft
   [REF_BOTNET]: https://media.kasperskycontenthub.com/wp-content/uploads/sites/43/2009/07/01121538/ynam_botnets_0907_en.pdf
   [REF_CREDS]: https://lists.torproject.org/pipermail/tor-dev/2020-March/014198.html
   [REF_TARGET]: https://en.bitcoin.it/wiki/Target
+  [REF_TLS]: https://www.ietf.org/archive/id/draft-nygren-tls-client-puzzles-02.txt
+             https://tools.ietf.org/id/draft-nir-tls-puzzles-00.html
+             https://tools.ietf.org/html/draft-ietf-ipsecme-ddos-protection-10
+  [REF_TLS_1]: https://www.ietf.org/archive/id/draft-nygren-tls-client-puzzles-02.txt
