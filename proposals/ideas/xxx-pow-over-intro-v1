@@ -183,7 +183,11 @@ Status: Draft
   The benefit here is that legitimate clients who really care about getting
   access can spend a big amount of effort into their PoW computation, which
   should guarantee access to the service given reasonable adversary models. See
-  [POW_SECURITY] for more details about these guarantees and tradeoffs.
+  [PARAM_TUNING] for more details about these guarantees and tradeoffs.
+
+  As a way to improve reachability and UX, the service tries to estimate the
+  effort needed for clients to get access at any given time and places it in
+  the descriptor. See [EFFORT_ESTIMATION] for more details.
 
 2.2.3. PoW effort
 
@@ -212,6 +216,10 @@ Status: Draft
                   hash function. Should be 32 random bytes encoded in base64
                   without trailing padding.
 
+        suggested-effort: An unsigned integer specifying an effort value that
+                  clients should aim for when contacting the service. See
+                  [EFFORT_ESTIMATION] for more details here.
+
         expiration-time: A timestamp in "YYYY-MM-DD SP HH:MM:SS" format after
                          which the above seed expires and is no longer valid as
                          the input for PoW. It's needed so that the size of our
@@ -228,15 +236,13 @@ Status: Draft
   If a client receives a descriptor with "pow-params", it should assume that
   the service is expecting a PoW input as part of the introduction protocol.
 
-  In such cases, the client should have been configured with a specific PoW
-  'target' (which is a 32-byte integer similar to the 'target' of Bitcoin
-  [REF_TARGET]). See [POW_SECURITY] for more information of how such a target
-  should be set. For the purposes of this section, we will assume that the
-  target has been set automatically by Tor, or the user configured it manually.
+  The client parses the descriptor and extracts the PoW parameters. It makes
+  sure that the <expiration-time> has not expired and if it has, it needs to
+  fetch a new descriptor.
 
-  Now the client parses the descriptor and extracts the PoW parameters. It
-  makes sure that the expiration-time has not expired and if it has, it needs
-  to fetch a new descriptor.
+  The client should then extract the <suggested-effort> field to configure its
+  PoW 'target' (see [REF_TARGET]). The client SHOULD NOT accept 'target' values
+  that will cause an infinite PoW computation. {XXX: How to enforce this?}
 
   To complete the PoW the client follows the following logic:
 
@@ -244,12 +250,11 @@ Status: Draft
       b) Client derives 'seed' by decoding 'seed-b64'.
       c) Client derives 'labeled_seed = seed + "TorV1PoW"'
       d) Client computes hash_output = argon2(labeled_seed, nonce)
-      e) Client interprets hash_output as a 32-byte big-endian integer.
-      f) Client checks if int(hash_output) <= target.
-        f1) If yes, success! The client uses 'hash_output' as the puzzle
+      e) Client checks if effort(hash_output) >= target.
+        e1) If yes, success! The client uses 'hash_output' as the puzzle
             solution and 'nonce' and 'seed' as its inputs.
-        f2) If no, fail! The client interprets 'nonce' as a big-endian integer,
-            increments it by one, and goes back to step (c).
+        e2) If no, fail! The client interprets 'nonce' as a big-endian integer,
+            increments it by one, and goes back to step (d).
 
   At the end of the above procedure, the client should have a triplet
   (hash_output, seed, nonce) that can be used as the answer to the PoW
@@ -332,7 +337,7 @@ Status: Draft
 
 3.4.2. The Introduction Queue  [INTRO_QUEUE]
 
-3.4.2.1. Adding introductions to the introduction queue
+3.4.2.1. Adding introductions to the introduction queue [ADD_QUEUE]
 
   When PoW is enabled and a verified introduction comes through, the service
   instead of jumping straight into rendezvous, queues it and prioritizes it
@@ -354,9 +359,6 @@ Status: Draft
    effort what attacks can happen in various scenarios? Do we want to order on
    time+effort?  Which scenarios and attackers should we examine here?}
 
-  {TODO: PARAM_TUNING: What's the max size of the queue? How do we trim it? Can we
-   use WRED usefully?}
-
 3.4.2.2. Handling introductions from the introduction queue [HANDLE_QUEUE]
 
   The service should handle introductions by pulling from the introduction
@@ -370,18 +372,144 @@ Status: Draft
   With this tempo, we can process 200 introduction cells per second.
   {XXX: Is this good?}
 
+  After the introduction request is handled from the queue, the service trims
+  the priority queue if the queue is too big.
+  {TODO: PARAM_TUNING: What's the max size of the queue? How do we trim it? Can
+  we use WRED usefully?}
+
   {TODO: PARAM_TUNING: STRAWMAN: This needs hella tuning. Processing 20 cells
   per 100ms is probably unmaintainable, since each cell is quite expensive:
   doing so involving path selection, crypto and making circuits. We will need
   to profile this procedure and see how we can do this scheduling better.}
 
-4. Attacker strategies [ATTACK_META]
+3.4.3. PoW effort estimation [EFFORT_ESTIMATION]
+
+  During its operation the service continuously keeps track of the received PoW
+  cell efforts to inform its clients of the effort they should put in their
+  introduction to get service. The service informs the clients by using the
+  <suggested-effort> field in the descriptor.
+
+  In particular, the service starts with a default suggested-effort value of 15.
+
+  Everytime the service handles an introduction request from the priority queue
+  in [HANDLE_QUEUE], the service compares the request's effort to the current
+  suggested-effort value. If the new request's effort is lower than the
+  suggested-effort, set the suggested-effort equal to the effort of the new
+  request.
+
+  Everytime the service trims the priority queue in [HANDLE_QUEUE], the service
+  compares the request at the trim point against the current suggested-effort
+  value. If the trimmed request's effort is higher than the suggested-effort,
+  set the suggested-effort equal to the effort of the new request.
+
+  The above two operations are meant to balance the suggested effort based on
+  the requests currently waiting in the priority queue. If the priority queue
+  is filled with high-effort requests, make the suggested effort higher. And
+  when all the high-effort requests get handled and the priority queue is back
+  to normal operation, relax the suggested effort to lower levels.
+
+  The suggested-effort is not a hard limit to the efforts that are accepted by
+  the service, and it's only meant to serve as a guideline for clients to
+  reduce the number of unsuccessful requests that get to the service. The
+  service still adds requests with lower effort than suggested-effort to the
+  priority queue in [ADD_QUEUE].
+
+  {XXX: What attacks are possible here?}
+
+3.4.3.1. Updating descriptor with new suggested effort
+
+  When a service changes its suggested-effort value, it SHOULD upload a new
+  descriptor with the new value.
+
+  The service should avoid uploading descriptors too often to avoid overwheming
+  the HSDirs. The service SHOULD NOT upload descriptors more often than
+  'hs-pow-desc-upload-rate-limit' seconds (which is controlled through a
+  consensus parameter and has a default value of 300 seconds).
+
+  {XXX: Is this too often? Or too rare? Perhaps we can set different limits
+  for when the difficulty goes up and different for when it goes down. It's
+  more important to update the descriptor when the difficulty goes up.}
+
+  {XXX: What attacks are possible here? Can the attacker intentionally hit this
+  rate-limit and then influence the suggested effort so that clients do not
+  learn about the new effort?}
+
+4. Client behavior [CLIENT_BEHAVIOR]
+
+  This proposal introduces a bunch of new ways where a legitimate client can
+  fail to reach the onion service.
+
+  Furthermore, there is currently no end-to-end way for the onion service to
+  inform the client that the introduction failed. The INTRO_ACK cell is not
+  end-to-end (it's from the introduction point to the client) and hence it does
+  not allow the service to inform the client that the rendezvous is never gonna
+  occur.
+
+  For this reason we need to define some client behaviors to work around these
+  issues.
+
+4.1. Clients handling timeouts [CLIENT_TIMEOUT]
+
+  Alice can fail to reach the onion service if her introduction request gets
+  trimmed off the priority queue in [HANDLE_QUEUE], or if the service does not
+  get through its priority queue in time and the connection times out.
+
+  {XXX: How should timeout values change here since the priority queue will
+  cause bigger delays than usual to rendezvous?}
+
+  This section presents a heuristic method for the client getting service even
+  in such scenarios.
+
+  If the rendezvous request times out, the client SHOULD fetch a new descriptor
+  for the service to make sure that it's using the right suggested-effort for
+  the PoW and the right PoW seed. The client SHOULD NOT fetch service
+  descriptors more often than every 'hs-pow-desc-fetch-rate-limit' seconds
+  (which is controlled through a consensus parameter and has a default value of
+  600 seconds).
+
+  {XXX: Is this too rare? Too often?}
+
+  When the client fetches a new descriptor, it should try connecting to the
+  service with the new suggested-effort and PoW seed. If that doesn't work, it
+  should double the effort and retry. The client should keep on
+  doubling-and-retrying until it manages to get service, or its able to fetch a
+  new descriptor again.
+
+  {XXX: This means that the client will keep on spinning and
+  doubling-and-retrying for a service under this situation. There will never be
+  a "Client connection timed out" page for the user. Is this good? Is this bad?
+  Should we stop doubling-and-retrying after some iterations? Or should we
+  throw a custom error page to the user, and ask the user to stop spinning
+  whenever they want?}
+
+4.2. Seed expiration issues
+
+  As mentioned in [DESC_POW], the expiration timestamp on the PoW seed can
+  cause issues with clock skewed clients. Furthermore, even not clock skewed
+  clients can encounter TOCTOU-style race conditions here.
+
+  The client descriptor refetch logic of [CLIENT_TIMEOUT] should take care of
+  such seed-expiration issues, since the client will refetch the descriptor.
+
+  {XXX: Is this sufficient? Should we have multiple active seeds at the same
+  time similar to how we have overlapping descriptors and time periods in v3?
+  This would solve the problem but it grows the complexity of the system
+  substantially.}
+
+4.3. Other descriptor issues
+
+  Another race condition here is if the service enables PoW, while a client has
+  a cached descriptor. How will the client notice that PoW is needed? Does it
+  need to fetch a new descriptor? Should there be another feedback mechanism?
+  {XXX}
+
+5. Attacker strategies [ATTACK_META]
 
   Now that we defined our protocol we need to start tweaking the various
   knobs. But before we can do that, we first need to understand a few
   high-level attacker strategies to see what we are fighting against.
 
-4.1.1. Total overwhelm strat
+5.1.1. Total overwhelm strat
 
   Given the way the introduction queue works (see [HANDLE_QUEUE]), a very
   effective strategy for the attacker is to totally overwhelm the queue
@@ -399,7 +527,7 @@ Status: Draft
 
   {XXX: What other attack strategies we should care about?}
 
-5. Parameter tuning [POW_SECURITY] {XXX section}
+6. Parameter tuning [PARAM_TUNING]
 
   There are various parameters in this system that need to be tuned.
 
@@ -413,7 +541,7 @@ Status: Draft
   requests, and the resources that legitimate clients need to spend to get to
   the onon service.
 
-5.1. PoW Difficulty settings
+6.1. PoW Difficulty settings
 
   The difficulty setting of our PoW basically dictates how difficult it should
   be to get a success in our PoW system. In classic PoW systems, "success" is
@@ -484,7 +612,7 @@ Status: Draft
   into this equation right now, but as this proposal moves forward we will need
   to put more concrete values here.}
 
-5.2. Argon2 parameters [ARGON_PARAMS]
+6.2. Argon2 parameters [ARGON_PARAMS]
 
   We now need to define the secondary argon2 parameters as defined in
   [REF_ARGON2]. This includes the number of lanes 'h', the memory size 'm', the
@@ -518,51 +646,6 @@ Status: Draft
   not practical for our use case, since we want to process hundreds of such PoW
   per second... I also did not manage to find a benchmark of argon2 calls for
   different CPU/GPU/FPGA configurations.}
-
-6. Client behavior [CLIENT_BEHAVIOR]
-
-  This proposal introduces a bunch of new ways where a legitimate client can
-  fail to reach the onion service.
-
-  Furthermore, there is currently no end-to-end way for the onion service to
-  inform the client that the introduction failed. The INTRO_ACK cell is not
-  end-to-end (it's from the introduction point to the client) and hence it does
-  not allow the service to inform the client that the rendezvous is never gonna
-  occur.
-
-  Let's examine a few such cases:
-
-6.1. Timeout issues
-
-  Alice can fail to reach the onion service if her introduction request falls
-  off the priority queue, or if the priority queue is so big that the
-  connection times out.
-
-  Is building a new introduction circuit sufficient here? Or do we need to
-  build an end-to-end mechanism over the introduction circuit to inform
-  her? {XXX}
-
-  How should timeout values change here since the priority queue will cause
-  bigger delays than usual to rendezvous? Can there be some feedback mechanism
-  to inform the client of its queue position or ETA?
-
-6.2. Seed expiration issues
-
-  As mentioned in [DESC_POW], the expiration timestamp on the PoW seed can
-  cause issues with clock skewed clients. Furthermore, even not clock skewed
-  clients can encounter TOCTOU-style race conditions here.
-
-  How should this be handled? Should we have multiple active seeds at the same
-  time similar to how we have overlapping descriptors and time periods in v3?
-  This would solve the problem but it grows the complexity of the system
-  substantially. {XXX}
-
-6.3. Other descriptor issues
-
-  Another race condition here is if the service enables PoW, while a client has
-  a cached descriptor. How will the client notice that PoW is needed? Does it
-  need to fetch a new descriptor? Should there be another feedback mechanism?
-  {XXX}
 
 7. Discussion
 
@@ -613,15 +696,15 @@ Status: Draft
     This proposal suffers from various UX issues because there is no end-to-end
     mechanism for an onion service to inform the client about its introduction
     request. If we had end-to-end introduction ACKs many of the problems from
-    [CLIENT_BEHAVIOR] would be aleviated.
+    [CLIENT_BEHAVIOR] would be aleviated. The problem here is that end-to-end
+    ACKs require modifications on the introduction point code and a network
+    update which is a lengthy process.
 
   - Multithreading scheduler
 
     Our scheduler is pretty limited by the fact that Tor has a single-threaded
     design. If we improve our multithreading support we could handle a much
     greater amount of introduction requests per second.
-
-
 
 7.2.2. Future designs [FUTURE_DESIGNS]
 
