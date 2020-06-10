@@ -397,6 +397,12 @@ Status: Draft
   suggested-effort, set the suggested-effort equal to the effort of the new
   request.
 
+  {XXX tevador attack: see their email
+     https://lists.torproject.org/pipermail/tor-dev/2020-May/014268.html
+   where it says "Secondly, the proposed method of calculating..."
+   They suggest using the median here and their "pause-before-desc-publish"
+   attack seems legit.}
+
   Everytime the service trims the priority queue in [HANDLE_QUEUE], the service
   compares the request at the trim point against the current suggested-effort
   value. If the trimmed request's effort is higher than the suggested-effort,
