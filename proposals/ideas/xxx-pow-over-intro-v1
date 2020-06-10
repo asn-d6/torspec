@@ -777,7 +777,16 @@ Status: Draft
       manage to demotivate them with technical means, the network as a whole
       will less wasteful. Also see [CATCH22] for a similar argument.
 
-8. References
+8. Acknowledgements
+
+  Thanks a lot to tevador for the various improvements to the proposal and for
+  helping us understand and tweak the RandomX scheme.
+
+  Thanks to Solar Designer for the help in understanding the current PoW
+  landscape, the various approaches we could take, and teaching us a few neat
+  tricks.
+
+9. References
 
   [REF_ARGON2]: https://github.com/P-H-C/phc-winner-argon2/blob/master/argon2-specs.pdf
                 https://password-hashing.net/#argon2
@@ -790,3 +799,4 @@ Status: Draft
              https://tools.ietf.org/id/draft-nir-tls-puzzles-00.html
              https://tools.ietf.org/html/draft-ietf-ipsecme-ddos-protection-10
   [REF_TLS_1]: https://www.ietf.org/archive/id/draft-nygren-tls-client-puzzles-02.txt
+
