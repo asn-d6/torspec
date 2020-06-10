@@ -194,10 +194,18 @@ Status: Draft
   For our dynamic PoW system to work, we will need to be able to compare PoW
   tokens with each other. To do so we define a function:
          unsigned effort(uint8_t *token)
-  which takes as its argument a hash output token, and returns the number of
-  leading zero bits on it.
+  which takes as its argument a hash output token, interprets it as a
+  bitstring, and returns the quotient of dividing a bitstring of 1s by it.
 
-  So for example effort(0000000110001010110100101) == 7.
+  So for example:
+         effort(00000001100010101101) = 11111111111111111111 / 00000001100010101101
+  or the same in decimal:
+         effort(6317) = 1048575 / 6317 = 165.
+
+  This definition of effort has the advantage of directly expressing the
+  expected number of hashes that the client had to calculate to reach the
+  effort. This is in contrast to the (cheaper) exponential effort definition of
+  taking the number of leading zero bits.
 
 3. Protocol specification
 
@@ -391,7 +399,7 @@ Status: Draft
   introduction to get service. The service informs the clients by using the
   <suggested-effort> field in the descriptor.
 
-  In particular, the service starts with a default suggested-effort value of 15.
+  In particular, the service starts with a default suggested-effort value of 5000.
 
   Everytime the service handles an introduction request from the priority queue
   in [HANDLE_QUEUE], the service compares the request's effort to the current
