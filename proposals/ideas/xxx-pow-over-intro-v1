@@ -786,17 +786,285 @@ Status: Draft
   landscape, the various approaches we could take, and teaching us a few neat
   tricks.
 
-9. References
+Appendix A.  Little-t tor engineering details
 
-  [REF_ARGON2]: https://github.com/P-H-C/phc-winner-argon2/blob/master/argon2-specs.pdf
-                https://password-hashing.net/#argon2
-  [REF_TABLE]: The table is based on the script below plus some manual editing for readability:
-               https://gist.github.com/asn-d6/99a936b0467b0cef88a677baaf0bbd04
-  [REF_BOTNET]: https://media.kasperskycontenthub.com/wp-content/uploads/sites/43/2009/07/01121538/ynam_botnets_0907_en.pdf
-  [REF_CREDS]: https://lists.torproject.org/pipermail/tor-dev/2020-March/014198.html
-  [REF_TARGET]: https://en.bitcoin.it/wiki/Target
-  [REF_TLS]: https://www.ietf.org/archive/id/draft-nygren-tls-client-puzzles-02.txt
-             https://tools.ietf.org/id/draft-nir-tls-puzzles-00.html
-             https://tools.ietf.org/html/draft-ietf-ipsecme-ddos-protection-10
-  [REF_TLS_1]: https://www.ietf.org/archive/id/draft-nygren-tls-client-puzzles-02.txt
+  This section describes how we will implement this proposal in the "tor"
+  software (little-t tor).
 
+  The following should be read as if tor is an onion service and thus the end
+  point of all inbound data.
+
+A.1. The Main Loop
+
+  Tor uses libevent for its mainloop. For network I/O operations, a mainloop
+  event is used to inform tor if it can read on a certain socket, or a
+  connection object in tor.
+
+  From there, this event will empty the connection input buffer (inbuf) by
+  extracting and processing a cell one at a time. The mainloop is single
+  threaded and thus each cell is handled sequentially.
+
+  Processing a cell means a series of operations (in order):
+
+    1) Unpack cell from inbuf to local buffer.
+
+    2) Decrypt cell (AES operations).
+
+    3) Parse cell header and process it depending on its RELAY_COMMAND.
+
+    4) INTRODUCE2 cell handling which means building a rendezvous circuit:
+        i)  Path selection
+        ii) Launch circuit to first hop.
+
+    5) Return to mainloop event which essentially means back to step (1).
+
+  Tor will at most read 32 cells out of the inbuf per mainloop round.
+
+A.2. Requirements for PoW
+
+  With this proposal, in order to prioritize cells by the amount of PoW work
+  it has done, cells can _not_ be processed sequentially as described above.
+
+  Thus, we need a way to queue a certain number of cells, prioritize them and
+  then process some cell(s) from the top of the queue as in the one that have
+  done the most proof of work.
+
+  Prioritization has to be done by validating PoW work of the cell and
+  processing part is essentially step (4) in section A.1.
+
+  We thus require a new cell processing flow that is _not_ compatible with
+  current tor design. The elements are:
+
+    - Priority queue of INTRODUCE2 cell ordered by "most PoW work". See
+      section 3.4.2.1.
+
+    - Defer bottom-half cell processing after INTRODUCE2 cells have been queued
+      from the inbuf into the priority queue.
+
+A.3. Proposed Plan
+
+  The intuitive way to address the A.2 requirements would be to do this
+  simple and naive approach:
+
+    1) Empty inbuf INTRODUCE2 cells into priority queue
+
+    2) Process all cells in pqueue
+
+    3) Yield back to mainloop.
+
+  However, we are worried that not returning to the mainloop after handling
+  32 cells in a row might create possible unforseen timing issues
+  that could leak information. It is different in the way that we now handle
+  one single cell then go back to the inbuf to handle another cell and so on.
+
+  We thus propose to split the INTRODUCE2 handling into two different steps:
+  top-half and bottom-half process.
+
+  The top-half process change to these steps where they are the same as the
+  ones in section A.1 except for (4): # XXX top-half is everything but 4
+
+    1) Unpack cell from inbuf to local buffer.
+
+    2) Decrypt cell (AES operations).
+
+    3) Parse INTRODUCE2 cell header and validate PoW. This step is CPU
+       intensive but must be done before we queue.
+
+    4) Queue INTRODUCE2 cell into the priority queue. Drop cell if queue is
+       at capacity (XXX need to think what's the total queue size)
+
+    5) Return to mainloop event which essentially means step (1).
+
+  An then, the bottom-half part, we introduce a new mainloop event to process
+  the priority queue _after_ the top-half event has completed. This new event
+  would do these operations sequentially:
+
+    1) Pop INTRODUCE2 cell from priority queue.
+
+    2) Parse and process INTRODUCE2 cell.
+
+    3) End event and yield back to mainloop.
+
+  The question is now when is this second event being triggered from the
+  mainloop?
+
+  We propose that this event is scheduled in when the network I/O event
+  queues at least 1 cell into the priority queue. Then, as long as it has a
+  cell in the queue, it would re-schedule itself for immediate execution
+  meaning at the next mainloop round, it would execute again.
+
+  The idea is to try to empty the queue as fast as it can in order to provide
+  a fast response time to an introduction request but always leave a chance
+  for more cells to appear between cell processing by yielding back to the
+  mainloop.
+
+  If the size of the queue drops to 0, it stops scheduling itself in order to
+  not create a busy loop. The network I/O event will re-schedule it in time.
+
+A.4 Discussion
+
+  Notice that the proposed solution will make the service handle 1 single
+  introduction request at every main loop event. The rationale is that tor
+  would do better prioritization if it can be done on the largest number of
+  cells possible.
+
+  Performance measurements might tell us another story so we could bump the
+  number of cells in the future from 1 to N where N <= 32.
+
+A.5 Performance
+
+  This section will detail the performance measurements we've done on tor.git
+  for handling an INTRODUCE2 cell and then a discussion on how much more CPU
+  time we can add (for PoW validation) before it badly degrades our
+  performance.
+
+A.5.1 Tor measurements
+
+  These measurements have been done on tor.git at commit
+  80031db32abebaf4d0a91c01db258fcdbd54a471.
+
+  We've measured several set of actions in the INTRODUCE2 cell handling
+  process on Intel(R) Xeon(R) CPU E5-2650 v4.
+
+  The service was accessed by hundreds of clients at once resulting in
+  thousands of connections and done for 60 seconds.
+
+  1. Full Mainloop Event
+
+     We've measured the time it takes for a full connection read mainloop
+     event to process an inbuf containing INTRODUCE2 cells.
+
+     Total measurements: 3279
+
+       Min: 0.30 msec - 1st Q.: 5.47 msec - Median: 5.91 msec
+       Mean: 13.43 msec - 3rd Q.: 16.20 msec - Max: 257.95 msec
+
+  2. Connection data read (top-half)
+
+     This represents the top-half which means that bytes are taken from the
+     connection inbound buffer and parsed into an INTRODUCE2 cell where
+     basic validation is done.
+
+     # XXX 2.42 is just this experiment not a fundamental limit
+
+     There is an average of 2.42 INTRODUCE2 cells per mainloop event (see further down
+     for an explanation on why) and so we divide that by the full mainloop
+     event mean time to get the time for one cell and then substract the
+     INTRODUCE2 cell processing mean time to get how much this step takes
+     time:
+
+        => 13.43 / (7931 / 3279) = 5.55
+        => 5.55 - 5.29 = 0.26
+
+        Mean: 0.26 msec
+
+  3. INTRODUCE2 cell processing (bottom-half)
+
+     Within the mainloop event, we've measured how much time step 4 of
+     section A.1 should take:
+
+     Total measurements: 7931
+
+       Min: 0.28 msec - 1st Q.: 5.06 msec - Median: 5.33 msec
+       Mean: 5.29 msec - 3rd Q.: 5.57 msec - Max: 14.64 msec
+
+
+  The total amount of INTRODUCE2 cell processed is higher than the number of
+  connection inbuf handling (7931 vs 3279). The reason is that one connection
+  read mainloop event can process multiple INTRODUCE2 cell at once.
+
+  Thus the average number of INTRODUCE2 cells a mainloop event processes is
+  ~2.42 cells (7931/3279).
+
+  Which means that, taking the mean of mainloop event times, it takes
+  ~5.55msec (13.43/2.42) to process an INTRODUCE2 cell from step 1 to 5 of
+  section A.1.
+
+  And the mean of processing an INTRODUCE2 cell, step 4 from section A.1,
+  takes ~5.29msec which represents 95% of the total work. It is expected
+  because of the path selection and rendezvous circuit launch.
+
+A.5.2 PoW Validation CPU Time
+
+  The PoW validation happens in the top-half of the INTRODUCE2 handling
+  process as we validate cells before they get queued and processed
+  (bottom-half).
+
+  During our measurements, the time to handle INTRODUCE2 cells dominates any
+  other action time. There might be events that require a long processing
+  time, but these are pretty infrequent (like uploading a new HS descriptor)
+  and hence over a long time they smooth out. Hence extrapolating the total
+  requests per second based on a single request is reasonable and that's what
+  we do on the table below.
+
+  The top-half processing time is 0.26 msec which means that we can
+  theoretically _queue_ 3846.15 cells per seconds.
+
+      +----------+------------+--------------+
+      | PoW verification Time | Total Time |  Cells Queued|
+      | (in msec)| (in msec)  |     per sec  |
+      |----------|------------|--------------|
+      |    0     |    0.26    |    3846.15   |
+      |    1     |    1.26    |    793.65    |
+      |    2     |    2.26    |    442.48    |
+      |    3     |    3.26    |    306.75    |
+      |    4     |    4.26    |    234.74    |
+      |    5     |    5.26    |    190.11    |
+      |    6     |    6.26    |    159.74    |
+      |    7     |    7.26    |    137.74    |
+      |    8     |    8.26    |    121.07    |
+      |    9     |    9.26    |    107.99    |
+      |    10    |    10.26   |    97.47     |
+      +----------+------------+--------------+
+
+  Note that our main loop event caps to 32 cells per round so in practice,
+  the number will be a bit lower than the above considering the time between
+  mainloop events which is extremely small.
+
+  For both the top and bottom half, the total time is 5.55 msec to handle an
+  INTRODUCE2 cell thus Tor can theoritically handle ~180 requests per seconds
+
+  The table below shows how much adding time for PoW validation will affect
+  the client request rate (in msec):
+
+      +----------+------------+--------------+
+      | PoW verification Time | Total Time | Request Rate |
+      |  (in msec)
+      |----------|------------|--------------|
+      |    0     |    5.55    |    180.18    |
+      |    1     |    6.55    |    152.67    |
+      |    2     |    7.55    |    132.45    |
+      |    3     |    8.55    |    116.96    |
+      |    4     |    9.55    |    104.71    |
+      |    5     |    10.55   |    94.79     |
+      |    6     |    11.55   |    86.58     |
+      |    7     |    12.55   |    79.68     |
+      |    8     |    13.55   |    73.80     |
+      |    9     |    14.55   |    68.73     |
+      |    10    |    15.55   |    64.31     |
+      +----------+------------+--------------+
+
+  We need the first table to tune the verification time of the PoW (to avoid
+  [ATTACK_TOP_HALF]) so that attackers cannot overwhelm the service with junk
+  cells. We need the second table to tune the PoW difficulty (to avoid
+  [ATTACK_BOTTOM_HALF]) so that attackers cannot overwhelm the service with
+  high-effort cells.
+
+  {TODO: BLOCKER: While gathering these measurements we found an issue with our
+  scheduler which was limiting the amount of cells we were reading per mainloop
+  invocation. We are currently analyzing it and will do another confirmation
+  round after we fix it: https://gitlab.torproject.org/tpo/core/tor/-/issues/40006}
+
+A.2. References
+
+    [REF_ARGON2]: https://github.com/P-H-C/phc-winner-argon2/blob/master/argon2-specs.pdf
+                  https://password-hashing.net/#argon2
+    [REF_TABLE]: The table is based on the script below plus some manual editing for readability:
+                 https://gist.github.com/asn-d6/99a936b0467b0cef88a677baaf0bbd04
+    [REF_BOTNET]: https://media.kasperskycontenthub.com/wp-content/uploads/sites/43/2009/07/01121538/ynam_botnets_0907_en.pdf
+    [REF_CREDS]: https://lists.torproject.org/pipermail/tor-dev/2020-March/014198.html
+    [REF_TARGET]: https://en.bitcoin.it/wiki/Target
+    [REF_TLS]: https://www.ietf.org/archive/id/draft-nygren-tls-client-puzzles-02.txt
+               https://tools.ietf.org/id/draft-nir-tls-puzzles-00.html
+               https://tools.ietf.org/html/draft-ietf-ipsecme-ddos-protection-10
+    [REF_TLS_1]: https://www.ietf.org/archive/id/draft-nygren-tls-client-puzzles-02.txt
