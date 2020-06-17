@@ -154,11 +154,16 @@ Status: Draft
 
 2.2.1. Primitives
 
-  For our proof-of-work scheme we want to minimize the spread of resources
-  between a motivated attacker and legitimate clients. This means that we are
-  looking to minimize any benefits that GPUs or ACICs can offer to an attacker.
+  For our proof-of-work function we will use the 'equix' scheme by tevador
+  [REF_EQUIX].  Equix is an assymetric PoW function based on Equihash<60,3>. It
+  features lightning fast verification speed, and also aims to minimize the
+  assymetry between CPU and GPU. Furthermore, it's designed for this particular
+  use-case and hence cryptocurrency miners are not incentivized to make
+  optimized ASICs for it.
 
-  For this reason we chose XXX_POW
+  {TODO: define verification/proof interface.}
+
+  We tune equix in section [EQUIX_TUNING].
 
 2.2.2. Dynamic PoW
 
@@ -371,7 +376,8 @@ Status: Draft
   introduction to get service. The service informs the clients by using the
   <suggested-effort> field in the descriptor.
 
-  In particular, the service starts with a default suggested-effort value of 5000.
+  In particular, the service starts with a default suggested-effort value of
+  5000 (see [EQUIX_DIFFICULTY] section for more info).
 
   Everytime the service handles an introduction request from the priority queue
   in [HANDLE_QUEUE], the service compares the request's effort to the current
@@ -537,23 +543,21 @@ Status: Draft
 
   There are various parameters in this PoW system that need to be tuned:
 
-  We will first start by tuning the time it takes to verify a PoW token. We do
-  this first because it's fundamental to the performance of onion services and
-  can turn into a DoS vector of its own. Furthermore, the verification time
-  influences the resources that the attacker needs to spend ot attack the
-  systme. We will do tuning in a way that's agnostic to the chosen PoW
-  function.
+  We first start by tuning the time it takes to verify a PoW token. We do this
+  first because it's fundamental to the performance of onion services and can
+  turn into a DoS vector of its own. We will do this tuning in a way that's
+  agnostic to the chosen PoW function.
 
-  We will then compute the right default difficulty for our PoW system. That
-  defines the expected time for attackers and clients to succeed in our
-  system. Same as above we will do this in a way that's agnostic to the chosen
-  PoW function.
+  We will then move towards analyzing the default difficulty setting for our
+  PoW system. That defines the expected time for clients to succeed in our
+  system, and the expected time for attackers to overwhelm our system. Same as
+  above we will do this in a way that's agnostic to the chosen PoW function.
 
-  Finally, with the above two pieces we can fully tune our PoW function. We can
-  then know the resources that an attacker needs to spend to overwhelm the
-  onion service, the resources that the service needs to spend to verify
-  introduction requests, and the resources that legitimate clients need to
-  spend to get to the onion service.
+  Finally, using those two pieces we will tune our PoW function and pick the
+  right default difficulty setting. At the end of this section we will know the
+  resources that an attacker needs to overwhelm the onion service, the
+  resources that the service needs to verify introduction requests, and the
+  resources that legitimate clients need to get to the onion service.
 
 6.1. PoW verification [POW_TUNING_VERIFICATION]
 
@@ -562,15 +566,13 @@ Status: Draft
   verification happens during the "top half" part of the process. Every
   milisecond spent verifying PoW adds overhead to the already existing "top
   half" part of handling an introduction cell. Hence we should be careful to
-  not add too much work here so that we don't enable attacks like
-  [ATTACK_TOP_HALF].
+  add minimal overhead here so that we don't enable attacks like [ATTACK_TOP_HALF].
 
   During our performance measurements in [TOR_MEASUREMENTS] we learned that the
   "top half" takes about 0.26 msecs in average, without doing any sort of PoW
-  verification. Using that value, we compute the following table, that
-  describes the number of cells we can queue per second (aka times we can
-  perform the "top half" process) for different values of PoW verification
-  time:
+  verification. Using that value we compute the following table, that describes
+  the number of cells we can queue per second (aka times we can perform the
+  "top half" process) for different values of PoW verification time:
 
       +---------------------+-----------------------+--------------+
       |PoW Verification Time| Total "top half" time | Cells Queued |
@@ -602,19 +604,17 @@ Status: Draft
 
   Whether an attacker can succeed at that depends on the attacker's resources,
   but also on the network's capacity.
-  {TODO: PARAM_TUNING: Need to investigate this}
+  {TODO: PARAM_TUNING: Need to investigate this and see if it's possible}
 
-  One thing is for certain: Our optimization purpose here is to have the
-  smallest PoW verification overhead possible that also allows us to achieve
-  all our other goals.
+  Our purpose here is to have the smallest PoW verification overhead possible
+  that also allows us to achieve all our other goals.
 
   [Note that the table above is simply the result of a naive multiplication and
   does not take into account all the auxiliary overheads that happen every
-  second like the time to invoke the mainloop, the bottom-half processes, the
-  time to detect PoW replays, or pretty much anything other than the "top-half"
-  processing.
+  second like the time to invoke the mainloop, the bottom-half processes, or
+  pretty much anything other than the "top-half" processing.
 
-  During our measurements, the time to handle INTRODUCE2 cells dominates any
+  During our measurements the time to handle INTRODUCE2 cells dominates any
   other action time: There might be events that require a long processing time,
   but these are pretty infrequent (like uploading a new HS descriptor) and
   hence over a long time they smooth out. Hence extrapolating the total cells
@@ -622,9 +622,10 @@ Status: Draft
   get some initial intuition. That said, the values of "Cells queued per
   second" from the table above, are likely much smaller than displayed above
   because of all the auxiliary overheads.]
+
   {TODO: PARAM_TUNING: Figure out auxiliary overheads in real scenario}
 
-6.2. PoW Difficulty settings
+6.2. PoW difficulty analysis [POW_DIFFICULTY_ANALYSIS]
 
   The difficulty setting of our PoW basically dictates how difficult it should
   be to get a success in our PoW system. An attacker who can get many successes
@@ -635,17 +636,22 @@ Status: Draft
   the "target". However, since our system is dynamic, we define "success" as an
   abstract high-effort computation.
 
-  Even tho our system is dynamic, we still need default difficulty settings
-  that will define the metagame. The client and attacker can still aim higher
-  or lower, but for UX purposes and for analysis purposes we do need to define
-  some difficulties.
+  Our system is dynamic but we still need a default difficulty settings that
+  will define the metagame and be used for bootstrapping the system. The client
+  and attacker can still aim higher or lower but for UX purposes and for
+  analysis purposes we do need to define a default difficulty.
 
-  We hence created the table (see [REF_TABLE]) below which shows how much time
-  a legitimate client with a single machine should expect to burn before they
-  get a single success. The x-axis is how many successes we want the attacker
-  to be able to do per second: the more successes we allow the adversary, the
-  more they can overwhelm our introduction queue. The y-axis is how many
-  machines the adversary has in her disposal, ranging from just 5 to 1000.
+6.2.1. Analysis based on adversary power
+
+  In this section we will try to do an analysis of PoW difficulty without using
+  any sort of Tor-related or PoW-related benchmark numbers.
+
+  We created the table (see [REF_TABLE]) below which shows how much time a
+  legitimate client with a single machine should expect to burn before they get
+  a single success. The x-axis is how many successes we want the attacker to be
+  able to do per second: the more successes we allow the adversary, the more
+  they can overwhelm our introduction queue. The y-axis is how many machines
+  the adversary has in her disposal, ranging from just 5 to 1000.
 
        ===============================================================
        |    Expected Time (in seconds) Per Success For One Machine   |
@@ -693,11 +699,14 @@ Status: Draft
   expensive cases, scaling up to the first case which could be hardest since
   the client is expected to spend 15 minutes for a single introduction.
 
-  Furthermore, during our performance measurements in [TOR_MEASUREMENTS] we
-  learned that completely handling an introduction cell takes 5.55 msecs in
-  average. Using that value, we can compute the following table, that describes
-  the number of introduction cells we can handle second for different values of
-  PoW verification.
+6.2.2. Analysis based on Tor's performance [POW_DIFFICULTY_TOR]
+
+  To go deeper here, we can use the performance measurements from
+  [TOR_MEASUREMENTS] to get a more specific intuition on the default
+  difficulty. In particular, we learned that completely handling an
+  introduction cell takes 5.55 msecs in average. Using that value, we can
+  compute the following table, that describes the number of introduction cells
+  we can handle per second for different values of PoW verification:
 
       +---------------------+-----------------------+--------------+
       |PoW Verification Time| Total time to handle  | Cells handled|
@@ -726,48 +735,40 @@ Status: Draft
     64 high-effort introduction cells per second to succeed in a
     [ATTACK_BOTTOM_HALF] attack.
 
+  We can use this table to specify a default difficulty that won't allow our
+  target adversary to succeed in an [ATTACK_BOTTOM_HALF] attack.
+
   Of course, when it comes to this table, the same disclaimer as in section
   [POW_TUNING_VERIFICATION] is valid. That is, the above table is just a
   theoretical extrapolation and we expect the real values to be much lower
   since they depend on auxiliary processing overheads, and on the network's
-  capacity.  {TODO: Figure out auxiliary overheads here too}
+  capacity.
+  {TODO: Figure out auxiliary overheads here too}
 
-6.3. XXX_POW parameters [ARGON_PARAMS]
+6.3. Tuning equix difficulty [EQUIX_DIFFICULTY]
 
-  XXX_POW
+  The above two sections were not depending on a particular PoW scheme. They
+  gave us an intuition on the values we are aiming for in terms of verification
+  speed and PoW difficulty. Now we need to make things concrete:
 
-  We now need to define the secondary argon2 parameters as defined in
-  [REF_ARGON2]. This includes the number of lanes 'h', the memory size 'm', the
-  number of iterations 't'. Section 9 of [REF_ARGON2] recommends an approach of
-  how to tune these parameters.
+  As described in section [EFFORT_ESTIMATION] we start the service with a
+  default suggested-effort value of 5000. Given the benchmarks of EquiX
+  [REF_EQUIX] this should take about 2 to 3 seconds on a modern CPU.
 
-  To tune these parameters we are looking to *minimize* the verification speed
-  of an onion service, while *maximizing* the sparse resources spent by an
-  adversary trying to overwhelm the service using [ATTACK_META].
+  With this default difficulty setting and given the table in
+  [POW_DIFFICULTY_ANALYSIS] this means that an attacker with 50 boxes will be
+  able to get about 20 successful PoWs per second, and an attacker with 100
+  boxes about 40 successful PoWs per second.
 
-  When it comes to verification speed, to verify a single introduction cell the
-  service needs to do a single argon2 call: so the service will need to do
-  hundreds of those per second as INTRODUCE2 cells arrive. The service will
-  have to do this verification step even for very cheap zero-effort PoW
-  received, so this has to be a cheap procedure so that it doesn't become a DoS
-  vector of each own. Hence each individual argon2 call must be cheap enough to
-  be able to be done comfortably and plentifuly by an onion service with a
-  single host (or horizontally scaled with Onionbalance).
+  Then using the table in [POW_DIFFICULTY_TOR] we can see that the number of
+  attacker's successes is not enough to overwhelm the service through an
+  [ATTACK_BOTTOM_HALF] attack. That is, an attacker would need to do about 152
+  introductions per second to overwhelm the service, whereas they can only do
+  40 with 100 boxes.
 
-  At the same time, the adversary will have to do thousands of these calls if
-  she wants to make high-effort PoW, so it's this assymetry that we are looking
-  to exploit here. Right now, the most expensive resource for adversaries is
-  the RAM size, and that's why we chose argon2 which is memory-hard.
-
-  To minmax this game we will need
-
-  {TODO: PARAM_TUNING: I've had a hard time minmaxing this game for
-  argon2. Even argon2 invocations with a small memory parameter will take
-  multiple milliseconds to run on my machine, and the parameters recommended in
-  section 8 of the paper all take many hundreds of milliseconds. This is just
-  not practical for our use case, since we want to process hundreds of such PoW
-  per second... I also did not manage to find a benchmark of argon2 calls for
-  different CPU/GPU/FPGA configurations.}
+  {TODO: Still, the [POW_DIFFICULTY_TOR] disclaimer about auxiliary overhead is
+  too true and we need to figure it out. For now this section remains just to
+  show the methodology and not to be hard on the numbers}
 
 7. Discussion
 
@@ -883,7 +884,7 @@ Status: Draft
   landscape, the various approaches we could take, and teaching us a few neat
   tricks.
 
-Appendix A.  Little-t tor engineering details
+Appendix A.  Little-t tor introduction scheduler
 
   This section describes how we will implement this proposal in the "tor"
   software (little-t tor).
