@@ -354,33 +354,15 @@ Status: Draft
   more priority it gets in the queue. If two elements have the same effort, the
   older one has priority over the newer one.
 
-  {TODO: PARAM_TUNING: If the priority queue is only ordered based on the
-   effort what attacks can happen in various scenarios? Do we want to order on
-   time+effort?  Which scenarios and attackers should we examine here?}
-
 3.4.2.2. Handling introductions from the introduction queue [HANDLE_QUEUE]
 
   The service should handle introductions by pulling from the introduction
   queue. We call this part of introduction handling the "bottom half" because
-  most of the computation happens in this stage.
+  most of the computation happens in this stage. For a description of how we
+  expect such a system to work in Tor, see [TOR_SCHEDULER] section.
 
-  Similar to how our cell scheduler works, the onion service subsystem will
-  poll the priority queue every 100ms tick and process the first 20 cells from
-  the priority queue (if they exist). The service will perform the rendezvous
-  and the rest of the onion service protocol as normal.
-
-  With this tempo, we can process 200 introduction cells per second.
-  {XXX: Is this good?}
-
-  After the introduction request is handled from the queue, the service trims
-  the priority queue if the queue is too big.
   {TODO: PARAM_TUNING: What's the max size of the queue? How do we trim it? Can
   we use WRED usefully?}
-
-  {TODO: PARAM_TUNING: STRAWMAN: This needs hella tuning. Processing 20 cells
-  per 100ms is probably unmaintainable, since each cell is quite expensive:
-  doing so involving path selection, crypto and making circuits. We will need
-  to profile this procedure and see how we can do this scheduling better.}
 
 3.4.3. PoW effort estimation [EFFORT_ESTIMATION]
 
@@ -522,8 +504,9 @@ Status: Draft
   proof-of-work. This adversary tries to overwhelm the procedure in the
   [POW_VERIFY] section.
 
-  That's why we need the PoW algorithm to have extremely cheap verification
-  time so that this attack is not possible.
+  That's why we need the PoW algorithm to have a cheap verification time so
+  that this attack is not possible: we tune this PoW parameter in section
+  [POW_TUNING_VERIFICATION].
 
 5.1.2. Overwhelm rendezvous capacity (aka "Overwhelm bottom half") [ATTACK_BOTTOM_HALF]
 
@@ -550,26 +533,107 @@ Status: Draft
   the service for a limited amount of time, or confuse the difficulty
   estimation algorithm.
 
-6. Parameter tuning [PARAM_TUNING]
+6. Parameter tuning [POW_TUNING]
 
-  There are various parameters in this system that need to be tuned.
+  There are various parameters in this PoW system that need to be tuned:
 
-  We will first start by tuning the default difficulty of our PoW
-  system. That's gonna define an expected time for attackers and clients to
-  succeed.
+  We will first start by tuning the time it takes to verify a PoW token. We do
+  this first because it's fundamental to the performance of onion services and
+  can turn into a DoS vector of its own. Furthermore, the verification time
+  influences the resources that the attacker needs to spend ot attack the
+  systme. We will do tuning in a way that's agnostic to the chosen PoW
+  function.
 
-  We are then gonna tune the parameters of our proof-of-work function. That will
-  define the resources that an attacker needs to spend to overwhelm the onion
-  service, the resources that the service needs to spend to verify introduction
-  requests, and the resources that legitimate clients need to spend to get to
-  the onon service.
+  We will then compute the right default difficulty for our PoW system. That
+  defines the expected time for attackers and clients to succeed in our
+  system. Same as above we will do this in a way that's agnostic to the chosen
+  PoW function.
 
-6.1. PoW Difficulty settings
+  Finally, with the above two pieces we can fully tune our PoW function. We can
+  then know the resources that an attacker needs to spend to overwhelm the
+  onion service, the resources that the service needs to spend to verify
+  introduction requests, and the resources that legitimate clients need to
+  spend to get to the onion service.
+
+6.1. PoW verification [POW_TUNING_VERIFICATION]
+
+  Verifying a PoW token is the first thing that a service does when it receives
+  an INTRODUCE2 cell and it's detailed in section [POW_VERIFY]. This
+  verification happens during the "top half" part of the process. Every
+  milisecond spent verifying PoW adds overhead to the already existing "top
+  half" part of handling an introduction cell. Hence we should be careful to
+  not add too much work here so that we don't enable attacks like
+  [ATTACK_TOP_HALF].
+
+  During our performance measurements in [TOR_MEASUREMENTS] we learned that the
+  "top half" takes about 0.26 msecs in average, without doing any sort of PoW
+  verification. Using that value, we compute the following table, that
+  describes the number of cells we can queue per second (aka times we can
+  perform the "top half" process) for different values of PoW verification
+  time:
+
+      +---------------------+-----------------------+--------------+
+      |PoW Verification Time| Total "top half" time | Cells Queued |
+      |                     |                       |  per second  |
+      |---------------------|-----------------------|--------------|
+      |    0     msec       |    0.26      msec     |    3846      |
+      |    1     msec       |    1.26      msec     |    793       |
+      |    2     msec       |    2.26      msec     |    442       |
+      |    3     msec       |    3.26      msec     |    306       |
+      |    4     msec       |    4.26      msec     |    234       |
+      |    5     msec       |    5.26      msec     |    190       |
+      |    6     msec       |    6.26      msec     |    159       |
+      |    7     msec       |    7.26      msec     |    137       |
+      |    8     msec       |    8.26      msec     |    121       |
+      |    9     msec       |    9.26      msec     |    107       |
+      |    10    msec       |    10.26     msec     |    97        |
+      +---------------------+-----------------------+--------------+
+
+  Here is how you can read the table above:
+
+  - For a PoW function with a 1ms verification time, an attacker needs to send
+    793 dummy introduction cells per second to succeed in a [ATTACK_TOP_HALF] attack.
+
+  - For a PoW function with a 2ms verification time, an attacker needs to send
+    442 dummy introduction cells per second to succeed in a [ATTACK_TOP_HALF] attack.
+
+  - For a PoW function with a 10ms verification time, an attacker needs to send
+    97 dummy introduction cells per second to succeed in a [ATTACK_TOP_HALF] attack.
+
+  Whether an attacker can succeed at that depends on the attacker's resources,
+  but also on the network's capacity.
+  {TODO: PARAM_TUNING: Need to investigate this}
+
+  One thing is for certain: Our optimization purpose here is to have the
+  smallest PoW verification overhead possible that also allows us to achieve
+  all our other goals.
+
+  [Note that the table above is simply the result of a naive multiplication and
+  does not take into account all the auxiliary overheads that happen every
+  second like the time to invoke the mainloop, the bottom-half processes, the
+  time to detect PoW replays, or pretty much anything other than the "top-half"
+  processing.
+
+  During our measurements, the time to handle INTRODUCE2 cells dominates any
+  other action time: There might be events that require a long processing time,
+  but these are pretty infrequent (like uploading a new HS descriptor) and
+  hence over a long time they smooth out. Hence extrapolating the total cells
+  queued per second based on a single "top half" time seems like good enough to
+  get some initial intuition. That said, the values of "Cells queued per
+  second" from the table above, are likely much smaller than displayed above
+  because of all the auxiliary overheads.]
+  {TODO: PARAM_TUNING: Figure out auxiliary overheads in real scenario}
+
+6.2. PoW Difficulty settings
 
   The difficulty setting of our PoW basically dictates how difficult it should
-  be to get a success in our PoW system. In classic PoW systems, "success" is
-  defined as getting a hash output below the "target". However, since our
-  system is dynamic, we define "success" as an abstract high-effort computation.
+  be to get a success in our PoW system. An attacker who can get many successes
+  per second can pull a successfull [ATTACK_BOTTOM_HALF] attack against our
+  system.
+
+  In classic PoW systems, "success" is defined as getting a hash output below
+  the "target". However, since our system is dynamic, we define "success" as an
+  abstract high-effort computation.
 
   Even tho our system is dynamic, we still need default difficulty settings
   that will define the metagame. The client and attacker can still aim higher
@@ -629,13 +693,46 @@ Status: Draft
   expensive cases, scaling up to the first case which could be hardest since
   the client is expected to spend 15 minutes for a single introduction.
 
-  {TODO: PARAM_TUNING You can see that this section is completely CPU/memory
-  agnostic, and it does not take into account potential optimizations that can
-  come from GPU/ASICs. This is intentional so that we don't put more variables
-  into this equation right now, but as this proposal moves forward we will need
-  to put more concrete values here.}
+  Furthermore, during our performance measurements in [TOR_MEASUREMENTS] we
+  learned that completely handling an introduction cell takes 5.55 msecs in
+  average. Using that value, we can compute the following table, that describes
+  the number of introduction cells we can handle second for different values of
+  PoW verification.
 
-6.2. XXX_POW parameters [ARGON_PARAMS]
+      +---------------------+-----------------------+--------------+
+      |PoW Verification Time| Total time to handle  | Cells handled|
+      |                     |   introduction cell   |  per second  |
+      |---------------------|-----------------------|--------------|
+      |    0      msec      |    5.55        msec   |    180.18    |
+      |    1      msec      |    6.55        msec   |    152.67    |
+      |    2      msec      |    7.55        msec   |    132.45    |
+      |    3      msec      |    8.55        msec   |    116.96    |
+      |    4      msec      |    9.55        mesc   |    104.71    |
+      |    5      msec      |    10.55       msec   |    94.79     |
+      |    6      msec      |    11.55       msec   |    86.58     |
+      |    7      msec      |    12.55       msec   |    79.68     |
+      |    8      msec      |    13.55       msec   |    73.80     |
+      |    9      msec      |    14.55       msec   |    68.73     |
+      |    10     msec      |    15.55       msec   |    64.31     |
+      +---------------------+-----------------------+--------------+
+
+  Here is how you can read the table above:
+
+  - For a PoW function with a 1ms verification time, an attacker needs to send
+    152 high-effort introduction cells per second to succeed in a
+    [ATTACK_BOTTOM_HALF] attack.
+
+  - For a PoW function with a 10ms verification time, an attacker needs to send
+    64 high-effort introduction cells per second to succeed in a
+    [ATTACK_BOTTOM_HALF] attack.
+
+  Of course, when it comes to this table, the same disclaimer as in section
+  [POW_TUNING_VERIFICATION] is valid. That is, the above table is just a
+  theoretical extrapolation and we expect the real values to be much lower
+  since they depend on auxiliary processing overheads, and on the network's
+  capacity.  {TODO: Figure out auxiliary overheads here too}
+
+6.3. XXX_POW parameters [ARGON_PARAMS]
 
   XXX_POW
 
@@ -794,17 +891,18 @@ Appendix A.  Little-t tor engineering details
   The following should be read as if tor is an onion service and thus the end
   point of all inbound data.
 
-A.1. The Main Loop
+A.1. The Main Loop [MAIN_LOOP]
 
   Tor uses libevent for its mainloop. For network I/O operations, a mainloop
   event is used to inform tor if it can read on a certain socket, or a
   connection object in tor.
 
   From there, this event will empty the connection input buffer (inbuf) by
-  extracting and processing a cell one at a time. The mainloop is single
-  threaded and thus each cell is handled sequentially.
+  extracting and processing a cell at a time. The mainloop is single threaded
+  and thus each cell is handled sequentially.
 
-  Processing a cell means a series of operations (in order):
+  Processing an INTRODUCE2 cell at the onion service means a series of
+  operations (in order):
 
     1) Unpack cell from inbuf to local buffer.
 
@@ -818,7 +916,7 @@ A.1. The Main Loop
 
     5) Return to mainloop event which essentially means back to step (1).
 
-  Tor will at most read 32 cells out of the inbuf per mainloop round.
+  Tor will read at most 32 cells out of the inbuf per mainloop round.
 
 A.2. Requirements for PoW
 
@@ -826,229 +924,160 @@ A.2. Requirements for PoW
   it has done, cells can _not_ be processed sequentially as described above.
 
   Thus, we need a way to queue a certain number of cells, prioritize them and
-  then process some cell(s) from the top of the queue as in the one that have
-  done the most proof of work.
-
-  Prioritization has to be done by validating PoW work of the cell and
-  processing part is essentially step (4) in section A.1.
+  then process some cell(s) from the top of the queue (that is, the cells that
+  have done the most PoW effort).
 
   We thus require a new cell processing flow that is _not_ compatible with
   current tor design. The elements are:
 
-    - Priority queue of INTRODUCE2 cell ordered by "most PoW work". See
-      section 3.4.2.1.
+    - Validate PoW and place cells in a priority queue of INTRODUCE2 cells (as
+      described in section [INTRO_QUEUE]).
 
-    - Defer bottom-half cell processing after INTRODUCE2 cells have been queued
-      from the inbuf into the priority queue.
+    - Defer "bottom half" INTRO2 cell processing for after cells have been
+      queued into the priority queue.
 
-A.3. Proposed Plan
+A.3. Proposed scheduler [TOR_SCHEDULER]
 
   The intuitive way to address the A.2 requirements would be to do this
   simple and naive approach:
 
-    1) Empty inbuf INTRODUCE2 cells into priority queue
+    1) Mainloop: Empty inbuf INTRODUCE2 cells into priority queue
 
     2) Process all cells in pqueue
 
-    3) Yield back to mainloop.
+    3) Goto (1)
 
-  However, we are worried that not returning to the mainloop after handling
-  32 cells in a row might create possible unforseen timing issues
-  that could leak information. It is different in the way that we now handle
-  one single cell then go back to the inbuf to handle another cell and so on.
+  However, we are worried that handling all those cells before returning to the
+  mainloop opens possibilities of attack by an adversary since the priority
+  queue is not gonna be kept up to date while we process all those cells. This
+  means that we might spend lots of time dealing with introductions that don't
+  deserve it. See [BOTTOM_HALF_SCHEDULER] for more details.
 
   We thus propose to split the INTRODUCE2 handling into two different steps:
-  top-half and bottom-half process.
+  "top half" and "bottom half" process, as also mentioned in [POW_VERIFY]
+  section above.
 
-  The top-half process change to these steps where they are the same as the
-  ones in section A.1 except for (4): # XXX top-half is everything but 4
+A.3.1. Top half and bottom half scheduler
 
-    1) Unpack cell from inbuf to local buffer.
+  The top half process is responsible for queuing introductions into the
+  priority queue as follows:
 
-    2) Decrypt cell (AES operations).
+    a) Unpack cell from inbuf to local buffer.
 
-    3) Parse INTRODUCE2 cell header and validate PoW. This step is CPU
-       intensive but must be done before we queue.
+    b) Decrypt cell (AES operations).
 
-    4) Queue INTRODUCE2 cell into the priority queue. Drop cell if queue is
-       at capacity (XXX need to think what's the total queue size)
+    c) Parse INTRODUCE2 cell header and validate PoW.
 
-    5) Return to mainloop event which essentially means step (1).
+    d) Return to mainloop event which essentially means step (1).
 
-  An then, the bottom-half part, we introduce a new mainloop event to process
-  the priority queue _after_ the top-half event has completed. This new event
-  would do these operations sequentially:
+  The top-half basically does all operations of section [MAIN_LOOP] except from (4).
 
-    1) Pop INTRODUCE2 cell from priority queue.
+  An then, the bottom-half process is responsible for handling introductions
+  and doing rendezvous. To achieve this we introduce a new mainloop event to
+  process the priority queue _after_ the top-half event has completed. This new
+  event would do these operations sequentially:
 
-    2) Parse and process INTRODUCE2 cell.
+    a) Pop INTRODUCE2 cell from priority queue.
 
-    3) End event and yield back to mainloop.
+    b) Parse and process INTRODUCE2 cell.
 
-  The question is now when is this second event being triggered from the
-  mainloop?
+    c) End event and yield back to mainloop.
+
+A.3.2. Scheduling the bottom half process [BOTTOM_HALF_SCHEDULER]
+
+  The question now becomes: when should the "bottom half" event get triggered
+  from the mainloop?
 
   We propose that this event is scheduled in when the network I/O event
   queues at least 1 cell into the priority queue. Then, as long as it has a
   cell in the queue, it would re-schedule itself for immediate execution
   meaning at the next mainloop round, it would execute again.
 
-  The idea is to try to empty the queue as fast as it can in order to provide
-  a fast response time to an introduction request but always leave a chance
-  for more cells to appear between cell processing by yielding back to the
-  mainloop.
+  The idea is to try to empty the queue as fast as it can in order to provide a
+  fast response time to an introduction request but always leave a chance for
+  more cells to appear between cell processing by yielding back to the
+  mainloop. With this we are aiming to always have the most up-to-date version
+  of the priority queue when we are completing introductions: this way we are
+  prioritizing clients that spent a lot of time and effort completing their PoW.
 
   If the size of the queue drops to 0, it stops scheduling itself in order to
   not create a busy loop. The network I/O event will re-schedule it in time.
 
-A.4 Discussion
-
   Notice that the proposed solution will make the service handle 1 single
-  introduction request at every main loop event. The rationale is that tor
-  would do better prioritization if it can be done on the largest number of
-  cells possible.
-
-  Performance measurements might tell us another story so we could bump the
+  introduction request at every main loop event. However, when we do
+  performance measurements we might learn that it's preferable to bump the
   number of cells in the future from 1 to N where N <= 32.
 
-A.5 Performance
+A.4 Performance measurements
 
   This section will detail the performance measurements we've done on tor.git
   for handling an INTRODUCE2 cell and then a discussion on how much more CPU
   time we can add (for PoW validation) before it badly degrades our
   performance.
 
-A.5.1 Tor measurements
+A.4.1 Tor measurements [TOR_MEASUREMENTS]
+
+  In this section we will derive measurement numbers for the "top half" and
+  "bottom half" parts of handling an introduction cell.
 
   These measurements have been done on tor.git at commit
   80031db32abebaf4d0a91c01db258fcdbd54a471.
 
-  We've measured several set of actions in the INTRODUCE2 cell handling
-  process on Intel(R) Xeon(R) CPU E5-2650 v4.
-
-  The service was accessed by hundreds of clients at once resulting in
-  thousands of connections and done for 60 seconds.
+  We've measured several set of actions of the INTRODUCE2 cell handling process
+  on Intel(R) Xeon(R) CPU E5-2650 v4. Our service was accessed by an array of
+  clients that sent introduction requests for a period of 60 seconds.
 
   1. Full Mainloop Event
 
-     We've measured the time it takes for a full connection read mainloop
-     event to process an inbuf containing INTRODUCE2 cells.
+     We start by measuring the full time it takes for a mainloop event to
+     process an inbuf containing INTRODUCE2 cells. The mainloop event processed
+     2.42 cells per invocation on average during our measurements.
 
      Total measurements: 3279
 
        Min: 0.30 msec - 1st Q.: 5.47 msec - Median: 5.91 msec
        Mean: 13.43 msec - 3rd Q.: 16.20 msec - Max: 257.95 msec
 
-  2. Connection data read (top-half)
+  2. INTRODUCE2 cell processing (bottom-half)
 
-     This represents the top-half which means that bytes are taken from the
-     connection inbound buffer and parsed into an INTRODUCE2 cell where
-     basic validation is done.
-
-     # XXX 2.42 is just this experiment not a fundamental limit
-
-     There is an average of 2.42 INTRODUCE2 cells per mainloop event (see further down
-     for an explanation on why) and so we divide that by the full mainloop
-     event mean time to get the time for one cell and then substract the
-     INTRODUCE2 cell processing mean time to get how much this step takes
-     time:
-
-        => 13.43 / (7931 / 3279) = 5.55
-        => 5.55 - 5.29 = 0.26
-
-        Mean: 0.26 msec
-
-  3. INTRODUCE2 cell processing (bottom-half)
-
-     Within the mainloop event, we've measured how much time step 4 of
-     section A.1 should take:
+     We also measured how much time the "bottom half" part of the process
+     takes. That's the heavy part of processing an introduction request as seen
+     in step (4) of the [MAIN_LOOP] section:
 
      Total measurements: 7931
 
        Min: 0.28 msec - 1st Q.: 5.06 msec - Median: 5.33 msec
        Mean: 5.29 msec - 3rd Q.: 5.57 msec - Max: 14.64 msec
 
+  3. Connection data read (top half)
 
-  The total amount of INTRODUCE2 cell processed is higher than the number of
-  connection inbuf handling (7931 vs 3279). The reason is that one connection
-  read mainloop event can process multiple INTRODUCE2 cell at once.
+     Now that we have the above pieces, we can use them to measure just the
+     "top half" part of the procedure. That's when bytes are taken from the
+     connection inbound buffer and parsed into an INTRODUCE2 cell where basic
+     validation is done.
 
-  Thus the average number of INTRODUCE2 cells a mainloop event processes is
-  ~2.42 cells (7931/3279).
+     There is an average of 2.42 INTRODUCE2 cells per mainloop event and so we
+     divide that by the full mainloop event mean time to get the time for one
+     cell. From that we substract the "bottom half" mean time to get how much
+     the "top half" takes:
 
-  Which means that, taking the mean of mainloop event times, it takes
-  ~5.55msec (13.43/2.42) to process an INTRODUCE2 cell from step 1 to 5 of
-  section A.1.
+        => 13.43 / (7931 / 3279) = 5.55
+        => 5.55 - 5.29 = 0.26
 
-  And the mean of processing an INTRODUCE2 cell, step 4 from section A.1,
-  takes ~5.29msec which represents 95% of the total work. It is expected
-  because of the path selection and rendezvous circuit launch.
+        Mean: 0.26 msec
 
-A.5.2 PoW Validation CPU Time
+  To summarize, during our measurements the average number of INTRODUCE2 cells
+  a mainloop event processed is ~2.42 cells (7931 cells for 3279 mainloop
+  invocations).
 
-  The PoW validation happens in the top-half of the INTRODUCE2 handling
-  process as we validate cells before they get queued and processed
-  (bottom-half).
+  This means that, taking the mean of mainloop event times, it takes ~5.55msec
+  (13.43/2.42) to completely process an INTRODUCE2 cell. Then if we look deeper
+  we see that the "top half" of INTRODUCE2 cell processing takes 0.26 msec in
+  average, whereas the "bottom half" takes around 5.33 msec.
 
-  During our measurements, the time to handle INTRODUCE2 cells dominates any
-  other action time. There might be events that require a long processing
-  time, but these are pretty infrequent (like uploading a new HS descriptor)
-  and hence over a long time they smooth out. Hence extrapolating the total
-  requests per second based on a single request is reasonable and that's what
-  we do on the table below.
-
-  The top-half processing time is 0.26 msec which means that we can
-  theoretically _queue_ 3846.15 cells per seconds.
-
-      +----------+------------+--------------+
-      | PoW verification Time | Total Time |  Cells Queued|
-      | (in msec)| (in msec)  |     per sec  |
-      |----------|------------|--------------|
-      |    0     |    0.26    |    3846.15   |
-      |    1     |    1.26    |    793.65    |
-      |    2     |    2.26    |    442.48    |
-      |    3     |    3.26    |    306.75    |
-      |    4     |    4.26    |    234.74    |
-      |    5     |    5.26    |    190.11    |
-      |    6     |    6.26    |    159.74    |
-      |    7     |    7.26    |    137.74    |
-      |    8     |    8.26    |    121.07    |
-      |    9     |    9.26    |    107.99    |
-      |    10    |    10.26   |    97.47     |
-      +----------+------------+--------------+
-
-  Note that our main loop event caps to 32 cells per round so in practice,
-  the number will be a bit lower than the above considering the time between
-  mainloop events which is extremely small.
-
-  For both the top and bottom half, the total time is 5.55 msec to handle an
-  INTRODUCE2 cell thus Tor can theoritically handle ~180 requests per seconds
-
-  The table below shows how much adding time for PoW validation will affect
-  the client request rate (in msec):
-
-      +----------+------------+--------------+
-      | PoW verification Time | Total Time | Request Rate |
-      |  (in msec)
-      |----------|------------|--------------|
-      |    0     |    5.55    |    180.18    |
-      |    1     |    6.55    |    152.67    |
-      |    2     |    7.55    |    132.45    |
-      |    3     |    8.55    |    116.96    |
-      |    4     |    9.55    |    104.71    |
-      |    5     |    10.55   |    94.79     |
-      |    6     |    11.55   |    86.58     |
-      |    7     |    12.55   |    79.68     |
-      |    8     |    13.55   |    73.80     |
-      |    9     |    14.55   |    68.73     |
-      |    10    |    15.55   |    64.31     |
-      +----------+------------+--------------+
-
-  We need the first table to tune the verification time of the PoW (to avoid
-  [ATTACK_TOP_HALF]) so that attackers cannot overwhelm the service with junk
-  cells. We need the second table to tune the PoW difficulty (to avoid
-  [ATTACK_BOTTOM_HALF]) so that attackers cannot overwhelm the service with
-  high-effort cells.
+  The heavyness of the "bottom half" is to be expected since that's where 95%
+  of the total work takes place: in particular the rendezvous path selection
+  and circuit launch.
 
   {TODO: BLOCKER: While gathering these measurements we found an issue with our
   scheduler which was limiting the amount of cells we were reading per mainloop
@@ -1057,8 +1086,8 @@ A.5.2 PoW Validation CPU Time
 
 A.2. References
 
-    [REF_ARGON2]: https://github.com/P-H-C/phc-winner-argon2/blob/master/argon2-specs.pdf
-                  https://password-hashing.net/#argon2
+    [REF_EQUIX]: https://github.com/tevador/equix
+                 https://github.com/tevador/equix/blob/master/devlog.md
     [REF_TABLE]: The table is based on the script below plus some manual editing for readability:
                  https://gist.github.com/asn-d6/99a936b0467b0cef88a677baaf0bbd04
     [REF_BOTNET]: https://media.kasperskycontenthub.com/wp-content/uploads/sites/43/2009/07/01121538/ynam_botnets_0907_en.pdf
