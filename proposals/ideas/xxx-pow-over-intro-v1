@@ -366,41 +366,53 @@ Status: Draft
   most of the computation happens in this stage. For a description of how we
   expect such a system to work in Tor, see [TOR_SCHEDULER] section.
 
-  {TODO: PARAM_TUNING: What's the max size of the queue? How do we trim it? Can
-  we use WRED usefully?}
+  {TODO: PARAM_TUNING: What's the max size of the queue? Do we trim it, or do
+  we just stop adding new requests when it reaches max size? Can we use WRED?
+  Trimming is currently used EFFORT_ESTIMATION, so if we don't do it we need to
+  find a different way to estimate effort. See tevador's [REF_TEVADOR_2] email.}
 
 3.4.3. PoW effort estimation [EFFORT_ESTIMATION]
 
-  During its operation the service continuously keeps track of the received PoW
-  cell efforts to inform its clients of the effort they should put in their
-  introduction to get service. The service informs the clients by using the
-  <suggested-effort> field in the descriptor.
+  The service starts with a default suggested-effort value of 5000 (see
+  [EQUIX_DIFFICULTY] section for more info).
 
-  In particular, the service starts with a default suggested-effort value of
-  5000 (see [EQUIX_DIFFICULTY] section for more info).
+  Then during its operation the service continuously keeps track of the
+  received PoW cell efforts to inform its clients of the effort they should put
+  in their introduction to get service. The service informs the clients by
+  using the <suggested-effort> field in the descriptor.
 
   Everytime the service handles an introduction request from the priority queue
-  in [HANDLE_QUEUE], the service compares the request's effort to the current
-  suggested-effort value. If the new request's effort is lower than the
-  suggested-effort, set the suggested-effort equal to the effort of the new
-  request.
+  in [HANDLE_QUEUE], the service adds the request's effort to a sorted
+  'handled-requests-efforts' list. Everytime the service trims its priority
+  queue it adds the median of the trimmed requests' to a sorted
+  'trimmed-requests-median-efforts' list.
 
-  {XXX tevador attack: see their email
-     https://lists.torproject.org/pipermail/tor-dev/2020-May/014268.html
-   where it says "Secondly, the proposed method of calculating..."
-   They suggest using the median here and their "pause-before-desc-publish"
-   attack seems legit.}
-
-  Everytime the service trims the priority queue in [HANDLE_QUEUE], the service
-  compares the request at the trim point against the current suggested-effort
-  value. If the trimmed request's effort is higher than the suggested-effort,
-  set the suggested-effort equal to the effort of the new request.
+  Then every 'hs-pow-desc-upload-rate-limit' seconds (which is controlled
+  through a consensus parameter and has a default value of 300 seconds) and
+  while the DoS feature is enabled, the service updates its <suggested-effort>
+  value as follows:
+  - If the service's current <suggested-effort> value is lower than the
+    median of the 'trimmed-requests-median-efforts' list, then set
+    <suggested-effort> to that median (i.e. increase suggested-effort).
+  - *Else* if the service's current <suggested-effort> value is higher than the
+    median of the 'handled-requests-efforts' list, then set <suggested-effort>
+    to that median (i.e. lower suggested-effort).
+  - Either way, clear 'handled-requests-efforts' and
+    'trimmed-requests-median-efforts'.
 
   The above two operations are meant to balance the suggested effort based on
-  the requests currently waiting in the priority queue. If the priority queue
-  is filled with high-effort requests, make the suggested effort higher. And
-  when all the high-effort requests get handled and the priority queue is back
-  to normal operation, relax the suggested effort to lower levels.
+  the requests residing in the priority queue. If the priority queue is filled
+  with high-effort requests, make the suggested effort higher. And when all the
+  high-effort requests get handled and the priority queue is back to normal
+  operation, relax the suggested effort to lower levels.
+
+  Given the way the algorithm works above, priority is given to the operation
+  that increases the suggested-effort. Also the values are taken as medians
+  over a period of time to avoid [ATTACK_EFFORT] attacks where the attacker
+  changes her behavior right before the descriptor upload to influence the
+  <suggested-effort>.
+
+  {XXX: BLOCKER: Figure out of this system makes sense}
 
   The suggested-effort is not a hard limit to the efforts that are accepted by
   the service, and it's only meant to serve as a guideline for clients to
@@ -408,21 +420,28 @@ Status: Draft
   service still adds requests with lower effort than suggested-effort to the
   priority queue in [ADD_QUEUE].
 
-  {XXX: What attacks are possible here?}
+  {XXX: Another approach would be to use the maximum value instead of the
+  median here. This would give a more surefire effort estimation, but it could
+  also cause attacks where an adversary spends 1 hour to make a single
+  introduction with a huge PoW and then denies access to all clients for 5
+  minutes.}
+
+  {XXX: Does this mean that this system can auto-enable and auto-disable the
+  DoS subsystem with reasonable accuracy?}
 
 3.4.3.1. Updating descriptor with new suggested effort
 
-  When a service changes its suggested-effort value, it SHOULD upload a new
-  descriptor with the new value.
+  Every 'hs-pow-desc-upload-rate-limit' seconds the service should upload a new
+  descriptor with a new suggested-effort value.
 
   The service should avoid uploading descriptors too often to avoid overwheming
   the HSDirs. The service SHOULD NOT upload descriptors more often than
-  'hs-pow-desc-upload-rate-limit' seconds (which is controlled through a
-  consensus parameter and has a default value of 300 seconds).
+  'hs-pow-desc-upload-rate-limit'. The service SHOULD NOT upload a new
+  descriptor if the suggested-effort value changes by less than 15%.
 
-  {XXX: Is this too often? Or too rare? Perhaps we can set different limits
-  for when the difficulty goes up and different for when it goes down. It's
-  more important to update the descriptor when the difficulty goes up.}
+  {XXX: Is this too often? Perhaps we can set different limits for when the
+  difficulty goes up and different for when it goes down. It's more important
+  to update the descriptor when the difficulty goes up.}
 
   {XXX: What attacks are possible here? Can the attacker intentionally hit this
   rate-limit and then influence the suggested effort so that clients do not
@@ -531,13 +550,26 @@ Status: Draft
   user" (see [USER_MODEL]). This would block out all standard users and only
   allow motivated users to pass.
 
-5.1.3. Precomputed PoW attack
+5.1.3. Gaming the effort estimation logic [ATTACK_EFFORT]
+
+  Another way to beat this system is for the attacker to game the effort
+  estimation logic (see [EFFORT_ESTIMATION]). Essentialy, there are two attacks
+  that we are trying to avoid:
+
+  - Attacker sets descriptor suggested-effort to a very high value effectively
+    making it impossible for most clients to produce a PoW token in a
+    reasonable timeframe.
+  - Attacker sets descriptor suggested-effort to a very small value so that
+    most clients aim for a small value while the attacker comfortably launches
+    an [ATTACK_BOTTOM_HALF] using medium effort PoW (see [REF_TEVADOR_1])
+
+5.1.4. Precomputed PoW attack
 
   The attacker may precompute many valid PoW nonces and submit them all at once
   before the current seed expires, overwhelming the service temporarily even
   using a single computer. An attacker with this attack might be aiming to DoS
-  the service for a limited amount of time, or confuse the difficulty
-  estimation algorithm.
+  the service for a limited amount of time, or to cause an [ATTACK_EFFORT]
+  attack.
 
 6. Parameter tuning [POW_TUNING]
 
@@ -1098,3 +1130,5 @@ A.2. References
                https://tools.ietf.org/id/draft-nir-tls-puzzles-00.html
                https://tools.ietf.org/html/draft-ietf-ipsecme-ddos-protection-10
     [REF_TLS_1]: https://www.ietf.org/archive/id/draft-nygren-tls-client-puzzles-02.txt
+    [REF_TEVADOR_1]: https://lists.torproject.org/pipermail/tor-dev/2020-May/014268.html
+    [REF_TEVADOR_2]: https://lists.torproject.org/pipermail/tor-dev/2020-June/014358.html
