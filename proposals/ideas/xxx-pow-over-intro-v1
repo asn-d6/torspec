@@ -70,10 +70,6 @@ Status: Draft
   attacker and small botnets. To defend against a large botnet we would need
   more tools in our disposal (see [FUTURE_DESIGNS]).
 
-  {XXX: Do the above make sense? What other attackers do we care about? What
-        other metrics do we care about? Network speed? I got the botnet costs
-        from here [REF_BOTNET] Back up our claims of defence.}
-
 1.2.2. User profiles [USER_MODEL]
 
   We have attackers and we have users. Here are a few user profiles:
@@ -343,7 +339,7 @@ Status: Draft
   will flag some connections as replays even if they are not; with this false
   positive probability increasing as the number of entries increase. However,
   with the right parameter tuning this probability should be negligible and
-  well handled by clients. {TODO: PARAM_TUNING}
+  well handled by clients. {TODO: Figure bloom filter}
 
 3.4.2. The Introduction Queue  [INTRO_QUEUE]
 
@@ -372,7 +368,7 @@ Status: Draft
   most of the computation happens in this stage. For a description of how we
   expect such a system to work in Tor, see [TOR_SCHEDULER] section.
 
-  {TODO: PARAM_TUNING: What's the max size of the queue? Do we trim it, or do
+  {TODO: BLOCKER: What's the max size of the queue? Do we trim it, or do
   we just stop adding new requests when it reaches max size? Can we use WRED?
   Trimming is currently used EFFORT_ESTIMATION, so if we don't do it we need to
   find a different way to estimate effort. See tevador's [REF_TEVADOR_2] email.}
@@ -473,7 +469,7 @@ Status: Draft
   trimmed off the priority queue in [HANDLE_QUEUE], or if the service does not
   get through its priority queue in time and the connection times out.
 
-  {XXX: How should timeout values change here since the priority queue will
+  {XXX: BLOCKER: How should timeout values change here since the priority queue will
   cause bigger delays than usual to rendezvous?}
 
   This section presents a heuristic method for the client getting service even
@@ -506,7 +502,6 @@ Status: Draft
   Another race condition here is if the service enables PoW, while a client has
   a cached descriptor. How will the client notice that PoW is needed? Does it
   need to fetch a new descriptor? Should there be another feedback mechanism?
-  {XXX}
 
 5. Attacker strategies [ATTACK_META]
 
@@ -631,7 +626,7 @@ Status: Draft
 
   Whether an attacker can succeed at that depends on the attacker's resources,
   but also on the network's capacity.
-  {TODO: PARAM_TUNING: Need to investigate this and see if it's possible}
+  {TODO: BLOCKER: Need to investigate this and see if it's possible}
 
   Our purpose here is to have the smallest PoW verification overhead possible
   that also allows us to achieve all our other goals.
@@ -650,7 +645,7 @@ Status: Draft
   second" from the table above, are likely much smaller than displayed above
   because of all the auxiliary overheads.]
 
-  {TODO: PARAM_TUNING: Figure out auxiliary overheads in real scenario}
+  {TODO: BLOCKER: Figure out auxiliary overheads in real scenario}
 
 6.2. PoW difficulty analysis [POW_DIFFICULTY_ANALYSIS]
 
@@ -770,7 +765,7 @@ Status: Draft
   theoretical extrapolation and we expect the real values to be much lower
   since they depend on auxiliary processing overheads, and on the network's
   capacity.
-  {TODO: Figure out auxiliary overheads here too}
+  {TODO: BLOCKER: Figure out auxiliary overheads here too}
 
 6.3. Tuning equix difficulty [EQUIX_DIFFICULTY]
 
@@ -793,7 +788,7 @@ Status: Draft
   introductions per second to overwhelm the service, whereas they can only do
   40 with 100 boxes.
 
-  {TODO: Still, the [POW_DIFFICULTY_TOR] disclaimer about auxiliary overhead is
+  {TODO: BLOCKER: Still, the [POW_DIFFICULTY_TOR] disclaimer about auxiliary overhead is
   too true and we need to figure it out. For now this section remains just to
   show the methodology and not to be hard on the numbers}
 
