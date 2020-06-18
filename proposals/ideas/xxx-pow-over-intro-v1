@@ -227,12 +227,16 @@ Status: Draft
                          which the above seed expires and is no longer valid as
                          the input for PoW. It's needed so that the size of our
                          replay cache does not grow infinitely. It should be
-                         set to three hours in the future (+- some randomness).
-                         {TODO: PARAM_TUNING}
+                         set to RAND_TIME(now+7200, 900) seconds.
 
-       {XXX: Expiration time makes us even more susceptible to clock skews, but
-             it's needed so that our replay cache refreshes. How to fix this?
-             See [CLIENT_BEHAVIOR] for more details.}
+   The service should refresh its seed when expiration-time passes. The service
+   SHOULD keep its previous seed in memory and accept PoWs using it to avoid
+   race-conditions with clients that have an old seed. The service SHOULD avoid
+   generating two consequent seeds that have a common 4 bytes prefix. See
+   [INTRO1_POW] for more info.
+
+   By RAND_TIME(ts, interval) we mean a time between ts-interval and ts, chosen
+   uniformly at random.
 
 3.2. Client fetches descriptor and computes PoW [CLIENT_POW]
 
@@ -280,15 +284,17 @@ Status: Draft
 
       POW_VERSION    [1 byte]
       POW_NONCE      [16 bytes]
+      POW_SEED       [4 bytes]
 
    where:
 
     POW_VERSION is 1 for the protocol specified in this proposal
     POW_NONCE is 'nonce' from the section above
+    POW_SEED is the first 4 bytes of the seed used
 
-   This will increase the INTRODUCE1 payload size by 19 bytes since the
+   This will increase the INTRODUCE1 payload size by 23 bytes since the
    extension type and length is 2 extra bytes, the N_EXTENSIONS field is always
-   present and currently set to 0 and the EXT_FIELD is 17 bytes. According to
+   present and currently set to 0 and the EXT_FIELD is 21 bytes. According to
    ticket #33650, INTRODUCE1 cells currently have more than 200 bytes
    available.
 
@@ -310,7 +316,7 @@ Status: Draft
    To verify the client's proof-of-work the service extracts (hash_output,
    seed, nonce) from the INTRODUCE1 cell and MUST do the following steps:
 
-   1) Make sure that the client's seed is identical to the active seed.
+   1) Use POW_SEED to figure out whether client is using current or previous seed.
    2) Check the client's nonce for replays (see [REPLAY_PROTECTION] section).
    3) Verify that 'hash_output =?= XXX_POW(seed, nonce)
 
@@ -495,20 +501,6 @@ Status: Draft
   throw a custom error page to the user, and ask the user to stop spinning
   whenever they want?}
 
-4.2. Seed expiration issues
-
-  As mentioned in [DESC_POW], the expiration timestamp on the PoW seed can
-  cause issues with clock skewed clients. Furthermore, even not clock skewed
-  clients can encounter TOCTOU-style race conditions here.
-
-  The client descriptor refetch logic of [CLIENT_TIMEOUT] should take care of
-  such seed-expiration issues, since the client will refetch the descriptor.
-
-  {XXX: Is this sufficient? Should we have multiple active seeds at the same
-  time similar to how we have overlapping descriptors and time periods in v3?
-  This would solve the problem but it grows the complexity of the system
-  substantially.}
-
 4.3. Other descriptor issues
 
   Another race condition here is if the service enables PoW, while a client has
@@ -567,9 +559,12 @@ Status: Draft
 
   The attacker may precompute many valid PoW nonces and submit them all at once
   before the current seed expires, overwhelming the service temporarily even
-  using a single computer. An attacker with this attack might be aiming to DoS
-  the service for a limited amount of time, or to cause an [ATTACK_EFFORT]
-  attack.
+  using a single computer. The current scheme gives the attackers 4 hours to
+  launch this attack since each seed lasts 2 hours and the service caches two
+  seeds.
+
+  An attacker with this attack might be aiming to DoS the service for a limited
+  amount of time, or to cause an [ATTACK_EFFORT] attack.
 
 6. Parameter tuning [POW_TUNING]
 
