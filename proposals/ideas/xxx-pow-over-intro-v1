@@ -1,6 +1,6 @@
 Filename: xxx-pow-over-intro-v1
 Title: A First Take at PoW Over Introduction Circuits
-Author: George Kadianakis, Mike Perry, David Goulet
+Author: George Kadianakis, Mike Perry, David Goulet, tevador
 Created: 2 April 2020
 Status: Draft
 
@@ -114,7 +114,7 @@ Status: Draft
 2.1. Tor protocol overview
 
                                           +----------------------------------+
-                                          |                                  |
+                                          |          Onion Service           |
    +-------+ INTRO1  +-----------+ INTRO2 +--------+                         |
    |Client |-------->|Intro Point|------->|  PoW   |-----------+             |
    +-------+         +-----------+        |Verifier|           |             |
@@ -157,7 +157,9 @@ Status: Draft
   use-case and hence cryptocurrency miners are not incentivized to make
   optimized ASICs for it.
 
-  {TODO: define verification/proof interface.}
+  The Equix scheme provides two functions that will be used in this proposal:
+      - equix_solve(seed, nonce, effort) which solves a puzzle instance.
+      - equix_verify(seed, nonce, effort, solution) which verifies a puzzle solution.
 
   We tune equix in section [EQUIX_TUNING].
 
@@ -249,19 +251,20 @@ Status: Draft
 
   To complete the PoW the client follows the following logic:
 
-      a) Client generates 'nonce' as 16 random bytes.
-      b) Client derives 'seed' by decoding 'seed-b64'.
-      c) Client derives 'labeled_seed = seed + "TorV1PoW"'
-      d) Client computes hash_output = XXX_POW(labeled_seed, nonce)
-      e) Client checks if effort(hash_output) >= target.
-        e1) If yes, success! The client uses 'hash_output' as the puzzle
-            solution and 'nonce' and 'seed' as its inputs.
-        e2) If no, fail! The client interprets 'nonce' as a big-endian integer,
-            increments it by one, and goes back to step (d).
+      a) Client selects a target effort E.
+      b) Client generates a random 16-byte nonce N.
+      c) Client derives seed C by decoding 'seed-b64'.
+      d) Client calculates S = equix_solve(C || N || E)
+      e) Client calculates R = blake2b(C || N || E || S)
+      f) Client checks if R * E <= UINT32_MAX.
+        f1) If yes, success! The client can submit N, E, the first 4 bytes of C
+    and S.
+        f2) If no, fail! The client interprets N as a 16-byte little-endian
+    integer, increments it by 1 and goes back to step d).
 
-  At the end of the above procedure, the client should have a triplet
-  (hash_output, seed, nonce) that can be used as the answer to the PoW
-  puzzle. How quickly this happens depends solely on the 'target' parameter.
+  At the end of the above procedure, the client should have S as the solution
+  of the Equix puzzle with N as the nonce, C as the seed. How quickly this
+  happens depends solely on the target effort E parameter.
 
 3.3. Client sends PoW in INTRO1 cell [INTRO1_POW]
 
@@ -278,19 +281,21 @@ Status: Draft
 
    The EXT_FIELD content format is:
 
-      POW_VERSION    [1 byte]
-      POW_NONCE      [16 bytes]
-      POW_SEED       [4 bytes]
+        POW_VERSION    [1 byte]
+        POW_NONCE      [16 bytes]
+        POW_EFFORT     [4 bytes]
+        POW_SEED       [4 bytes]
+        POW_SOLUTION   [16 bytes]
 
    where:
 
     POW_VERSION is 1 for the protocol specified in this proposal
-    POW_NONCE is 'nonce' from the section above
+    POW_NONCE is the nonce 'N' from the section above
     POW_SEED is the first 4 bytes of the seed used
 
-   This will increase the INTRODUCE1 payload size by 23 bytes since the
+   This will increase the INTRODUCE1 payload size by 43 bytes since the
    extension type and length is 2 extra bytes, the N_EXTENSIONS field is always
-   present and currently set to 0 and the EXT_FIELD is 21 bytes. According to
+   present and currently set to 0 and the EXT_FIELD is 41 bytes. According to
    ticket #33650, INTRODUCE1 cells currently have more than 200 bytes
    available.
 
@@ -309,12 +314,16 @@ Status: Draft
 
 3.4.1. PoW verification [POW_VERIFY]
 
-   To verify the client's proof-of-work the service extracts (hash_output,
-   seed, nonce) from the INTRODUCE1 cell and MUST do the following steps:
+   To verify the client's proof-of-work the service MUST do the following steps:
 
-   1) Use POW_SEED to figure out whether client is using current or previous seed.
-   2) Check the client's nonce for replays (see [REPLAY_PROTECTION] section).
-   3) Verify that 'hash_output =?= XXX_POW(seed, nonce)
+      a) Find a valid seed C that starts with POW_SEED. Fail if no such seed
+         exists.
+      b) Fail if E = POW_EFFORT is lower than the minimum effort.
+      c) Fail if N = POW_NONCE is present in the replay cache (see [REPLAY_PROTECTION[)
+      d) Calculate R = blake2b(C || N || E || S)
+      e) Fail if R * E > UINT32_MAX
+      f) Fail if equix_verify(C || N || E, S) != EQUIX_OK
+      g) Put the request in the queue with a priority of E
 
    If any of these steps fail the service MUST ignore this introduction request
    and abort the protocol.
@@ -356,7 +365,7 @@ Status: Draft
   and its priority is the effort put into its PoW:
 
   When a verified introduction comes through, the service uses the effort()
-  function with hash_output as its input, and uses the output to place requests
+  function with the solution S as its input, and uses the output to place requests
   into the right position of the priority_queue: The bigger the effort, the
   more priority it gets in the queue. If two elements have the same effort, the
   older one has priority over the newer one.
@@ -368,11 +377,6 @@ Status: Draft
   most of the computation happens in this stage. For a description of how we
   expect such a system to work in Tor, see [TOR_SCHEDULER] section.
 
-  {TODO: BLOCKER: What's the max size of the queue? Do we trim it, or do
-  we just stop adding new requests when it reaches max size? Can we use WRED?
-  Trimming is currently used EFFORT_ESTIMATION, so if we don't do it we need to
-  find a different way to estimate effort. See tevador's [REF_TEVADOR_2] email.}
-
 3.4.3. PoW effort estimation [EFFORT_ESTIMATION]
 
   The service starts with a default suggested-effort value of 5000 (see
@@ -383,63 +387,61 @@ Status: Draft
   in their introduction to get service. The service informs the clients by
   using the <suggested-effort> field in the descriptor.
 
-  Everytime the service handles an introduction request from the priority queue
-  in [HANDLE_QUEUE], the service adds the request's effort to a sorted
-  'handled-requests-efforts' list. Everytime the service trims its priority
-  queue it adds the median of the trimmed requests' to a sorted
-  'trimmed-requests-median-efforts' list.
+  Everytime the service handles or trims an introduction request from the
+  priority queue in [HANDLE_QUEUE], the service adds the request's effort to a
+  sorted list.
 
-  Then every 'hs-pow-desc-upload-rate-limit' seconds (which is controlled
-  through a consensus parameter and has a default value of 300 seconds) and
-  while the DoS feature is enabled, the service updates its <suggested-effort>
-  value as follows:
-  - If the service's current <suggested-effort> value is lower than the
-    median of the 'trimmed-requests-median-efforts' list, then set
-    <suggested-effort> to that median (i.e. increase suggested-effort).
-  - *Else* if the service's current <suggested-effort> value is higher than the
-    median of the 'handled-requests-efforts' list, then set <suggested-effort>
-    to that median (i.e. lower suggested-effort).
-  - Either way, clear 'handled-requests-efforts' and
-    'trimmed-requests-median-efforts'.
+  Then every HS_UPDATE_PERIOD seconds (which is controlled through a consensus
+  parameter and has a default value of 300 seconds) and while the DoS feature
+  is enabled, the service updates its <suggested-effort> value as follows:
 
-  The above two operations are meant to balance the suggested effort based on
-  the requests residing in the priority queue. If the priority queue is filled
-  with high-effort requests, make the suggested effort higher. And when all the
-  high-effort requests get handled and the priority queue is back to normal
-  operation, relax the suggested effort to lower levels.
+    1. Set TOTAL_EFFORT to the sum of the effort of all valid requests that
+       have been received since the last HS descriptor update (this includes
+       all handled requests, trimmed requests and requests still in the queue)
 
-  Given the way the algorithm works above, priority is given to the operation
-  that increases the suggested-effort. Also the values are taken as medians
-  over a period of time to avoid [ATTACK_EFFORT] attacks where the attacker
-  changes her behavior right before the descriptor upload to influence the
-  <suggested-effort>.
+    2. Set SUGGESTED_EFFORT = TOTAL_EFFORT / (SVC_BOTTOM_CAPACITY * HS_UPDATE_PERIOD).
+       The denominator above is the max number of requests that the service
+       could have handled during that time.
 
-  {XXX: BLOCKER: Figure out of this system makes sense}
+    3. Set <suggested-effort> to max(MIN_EFFORT, SUGGESTED_EFFORT).
 
-  The suggested-effort is not a hard limit to the efforts that are accepted by
-  the service, and it's only meant to serve as a guideline for clients to
-  reduce the number of unsuccessful requests that get to the service. The
-  service still adds requests with lower effort than suggested-effort to the
-  priority queue in [ADD_QUEUE].
+    During the above procedure we use the following default values:
+      - MIN_EFFORT = 1000, as the result of a simulation experiment [REF_TEVADOR_SIM]
+      - SVC_BOTTOM_CAPACITY = 100, which is the number of introduction requests
+        that can be handled by the service per second. This was computed in
+        [POW_DIFFICULTY_TOR] as 180, but we reduced it to 100 to account for
+        slower computers and networks.
 
-  {XXX: Another approach would be to use the maximum value instead of the
-  median here. This would give a more surefire effort estimation, but it could
-  also cause attacks where an adversary spends 1 hour to make a single
-  introduction with a huge PoW and then denies access to all clients for 5
-  minutes.}
+  The above algorithm is meant to balance the suggested effort based on the
+  effort of all received requests. It attempts to dynamically adjust the
+  suggested effort so that it increases when an attack is received, and tones
+  down when the attack has stopped.
 
-  {XXX: Does this mean that this system can auto-enable and auto-disable the
-  DoS subsystem with reasonable accuracy?}
+  It's worth noting that the suggested-effort is not a hard limit to the
+  efforts that are accepted by the service, and it's only meant to serve as a
+  guideline for clients to reduce the number of unsuccessful requests that get
+  to the service. The service still adds requests with lower effort than
+  suggested-effort to the priority queue in [ADD_QUEUE].
+
+  Finally, the above algorithm will never reset back to zero suggested-effort,
+  even if the attack is completely over. That's because in that case it would
+  be impossible to determine the total computing power of connecting
+  clients. Instead it will reset back to MIN_EFFORT, and the operator will have
+  to manually shut down the anti-DoS mechanism.
+
+  {XXX: SVC_BOTTOM_CAPACITY is static above and will not be accurate for all
+  boxes. Ideally we should calculate SVC_BOTTOM_CAPACITY dynamically based on
+  the resources of every onion service while the algorithm is running.}
 
 3.4.3.1. Updating descriptor with new suggested effort
 
-  Every 'hs-pow-desc-upload-rate-limit' seconds the service should upload a new
-  descriptor with a new suggested-effort value.
+  Every HS_UPDATE_PERIOD seconds the service should upload a new descriptor
+  with a new suggested-effort value.
 
   The service should avoid uploading descriptors too often to avoid overwheming
   the HSDirs. The service SHOULD NOT upload descriptors more often than
-  'hs-pow-desc-upload-rate-limit'. The service SHOULD NOT upload a new
-  descriptor if the suggested-effort value changes by less than 15%.
+  HS_UPDATE_PERIOD. The service SHOULD NOT upload a new descriptor if the
+  suggested-effort value changes by less than 15%.
 
   {XXX: Is this too often? Perhaps we can set different limits for when the
   difficulty goes up and different for when it goes down. It's more important
@@ -468,9 +470,6 @@ Status: Draft
   Alice can fail to reach the onion service if her introduction request gets
   trimmed off the priority queue in [HANDLE_QUEUE], or if the service does not
   get through its priority queue in time and the connection times out.
-
-  {XXX: BLOCKER: How should timeout values change here since the priority queue will
-  cause bigger delays than usual to rendezvous?}
 
   This section presents a heuristic method for the client getting service even
   in such scenarios.
@@ -537,7 +536,25 @@ Status: Draft
   user" (see [USER_MODEL]). This would block out all standard users and only
   allow motivated users to pass.
 
-5.1.3. Gaming the effort estimation logic [ATTACK_EFFORT]
+5.1.3. Hybrid overwhelm strategy [ATTACK_HYBRID]
+
+  If both the top- and bottom- halves are processed by the same thread, this
+  opens up the possibility for a "hybrid" attack. Given the performance figures
+  for the bottom half (0.31 ms/req.) and the top half (5.5 ms/req.), the
+  attacker can optimally deny service by submitting 91 high-effort requests and
+  1520 invalid requests per second. This will completely saturate the main loop
+  because:
+
+  0.31*(1520+91) ~ 0.5 sec.
+  5.5*91         ~ 0.5 sec.
+
+  This attack only has half the bandwidth requirement of [ATTACK_TOP_HALF] and
+  half the compute requirement of [ATTACK_BOTTOM_HALF].
+
+  Alternatively, the attacker can adjust the ratio between invalid and
+  high-effort requests depending on their bandwidth and compute capabilities.
+
+5.1.4. Gaming the effort estimation logic [ATTACK_EFFORT]
 
   Another way to beat this system is for the attacker to game the effort
   estimation logic (see [EFFORT_ESTIMATION]). Essentialy, there are two attacks
@@ -626,7 +643,6 @@ Status: Draft
 
   Whether an attacker can succeed at that depends on the attacker's resources,
   but also on the network's capacity.
-  {TODO: BLOCKER: Need to investigate this and see if it's possible}
 
   Our purpose here is to have the smallest PoW verification overhead possible
   that also allows us to achieve all our other goals.
@@ -644,8 +660,6 @@ Status: Draft
   get some initial intuition. That said, the values of "Cells queued per
   second" from the table above, are likely much smaller than displayed above
   because of all the auxiliary overheads.]
-
-  {TODO: BLOCKER: Figure out auxiliary overheads in real scenario}
 
 6.2. PoW difficulty analysis [POW_DIFFICULTY_ANALYSIS]
 
@@ -765,7 +779,6 @@ Status: Draft
   theoretical extrapolation and we expect the real values to be much lower
   since they depend on auxiliary processing overheads, and on the network's
   capacity.
-  {TODO: BLOCKER: Figure out auxiliary overheads here too}
 
 6.3. Tuning equix difficulty [EQUIX_DIFFICULTY]
 
@@ -787,10 +800,6 @@ Status: Draft
   [ATTACK_BOTTOM_HALF] attack. That is, an attacker would need to do about 152
   introductions per second to overwhelm the service, whereas they can only do
   40 with 100 boxes.
-
-  {TODO: BLOCKER: Still, the [POW_DIFFICULTY_TOR] disclaimer about auxiliary overhead is
-  too true and we need to figure it out. For now this section remains just to
-  show the methodology and not to be hard on the numbers}
 
 7. Discussion
 
@@ -1102,11 +1111,6 @@ A.4.1 Tor measurements [TOR_MEASUREMENTS]
   of the total work takes place: in particular the rendezvous path selection
   and circuit launch.
 
-  {TODO: BLOCKER: While gathering these measurements we found an issue with our
-  scheduler which was limiting the amount of cells we were reading per mainloop
-  invocation. We are currently analyzing it and will do another confirmation
-  round after we fix it: https://gitlab.torproject.org/tpo/core/tor/-/issues/40006}
-
 A.2. References
 
     [REF_EQUIX]: https://github.com/tevador/equix
@@ -1122,3 +1126,4 @@ A.2. References
     [REF_TLS_1]: https://www.ietf.org/archive/id/draft-nygren-tls-client-puzzles-02.txt
     [REF_TEVADOR_1]: https://lists.torproject.org/pipermail/tor-dev/2020-May/014268.html
     [REF_TEVADOR_2]: https://lists.torproject.org/pipermail/tor-dev/2020-June/014358.html
+    [REF_TEVADOR_SIM]: https://github.com/tevador/scratchpad/blob/master/tor-pow/effort_sim.md
